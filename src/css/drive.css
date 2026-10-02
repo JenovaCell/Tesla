@@ -136,12 +136,12 @@
 .dock .dgrp { display: flex; align-items: center; flex: 1 1 0; min-width: 0; }
 .dock .dgrp.r { justify-content: flex-end; }
 .dock .dgrp.l { gap: 40px; }
-.dock .center { flex: 0 0 auto; display: flex; justify-content: center; align-items: center; gap: 4px; }
+.dock .center { flex: 0 0 auto; display: flex; justify-content: center; align-items: center; gap: 12px; }
 .dockbtn { width: 62px; height: 62px; border-radius: 16px; display: grid; place-items: center; position: relative; background: none; box-shadow: none !important; }
 .dockbtn svg { width: auto; height: auto; }
 .dockbtn.flat .dg, .dockbtn.flat .dg svg { display: block; }
 .dockbtn.flat:active { background: rgba(128,128,140,.2); transform: none; }
-.dockbtn.carbtn { color: #c7cad1; }
+.dockbtn.carbtn { width: 70px; }
 :root[data-theme="light"] .dockbtn.carbtn { color: #55585f; }
 .dockbtn.active::after, .dockbtn.carbtn.active::after { content: ""; position: absolute; bottom: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--blue); }
 .dockbtn.small { width: 46px; height: 46px; color: var(--hud-dim); }

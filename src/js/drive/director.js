@@ -14,8 +14,8 @@ import { Sound } from './sound.js';
 const LEGS = {
   start: { env: 'city', layout: 'full', driveway: true },
   highway: { env: 'highway', layout: 'split' },
-  city: { env: 'city', layout: 'full' },
-  end: { env: 'city', layout: 'full' },
+  city: { env: 'arterial', layout: 'full' },
+  end: { env: 'arterial', layout: 'full' },
 };
 
 export class Director {
@@ -113,7 +113,7 @@ export class Director {
     const seg = LEGS[name];
     this.leg = name;
     const seedN = this.seed + Math.floor(performance.now() % 1000) + (name === 'highway' ? 7 : name === 'end' ? 14 : 0);
-    this.world = new World(seg.env, seedN, { v: fromRest ? 0 : v0, profile: 'standard', driveway: !!seg.driveway });
+    this.world = new World(seg.env, seedN, { v: fromRest ? 0 : v0, profile: 'hurry', driveway: !!seg.driveway });
     this.segT = 0; this.arrivedT = null; this.ctl = {};
     this.state = 'drive';
     this.scene.setMode('drive'); this.setLayout(seg.layout);
@@ -132,7 +132,7 @@ export class Director {
     this.ui.setFade(true);
     const v = this.world.ego.v;
     this._transition = true;
-    setTimeout(() => { this.beginLeg(name, false, Math.min(v, seg.env === 'highway' ? 28 : 12)); store.state._ap = true; this._transition = false; }, 750);
+    setTimeout(() => { this.beginLeg(name, false, (seg.env === 'highway' ? Math.max(25, Math.min(v + 8, 31)) : Math.min(v, 14))); store.state._ap = true; this._transition = false; }, 750);
   }
 
   /* ---------------- main loop ---------------- */

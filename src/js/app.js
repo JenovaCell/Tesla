@@ -98,13 +98,13 @@ function buildDock() {
   const theme = h('button', { class: 'dockbtn small', id: 'themeBtn', title: 'Light / Dark', onclick: () => store.set({ theme: resolvedTheme() === 'dark' ? 'light' : 'dark' }) });
   const full = h('button', { class: 'dockbtn small', title: 'Fullscreen (F11)', onclick: () => toggleFullscreen() }, icon('full', 22));
   const appBtn = (id, glyph) => h('button', { class: 'dockbtn flat', 'data-app': id, title: APPS[id].name, onclick: () => openApp(id) }, dockGlyph(glyph));
-  const car = h('button', { class: 'dockbtn flat carbtn', 'data-app': 'controls', title: 'Controls', onclick: () => openApp('controls') }, icon('car', 40));
+  const car = h('button', { class: 'dockbtn flat carbtn', 'data-app': 'controls', title: 'Controls', onclick: () => openApp('controls') }, dockGlyph('car', 46));
   const road = h('button', { class: 'dockbtn flat', title: 'Switch driving view', onclick: () => { if (director.state === 'drive') director.setLayout(director.layout === 'full' ? 'split' : 'full'); } }, dockGlyph('road'));
   return h('div', { class: 'dock' },
     h('div', { class: 'dgrp l' }, car, left),
     h('div', { class: 'center' },
-      appBtn('phone', 'phone'), appBtn('theater', 'theater'), appBtn('music', 'music'), appBtn('camera', 'camera'), appBtn('toybox', 'toybox'),
-      appBtn('calendar', 'calendar'), appBtn('energy', 'energy'), appBtn('apps', 'apps'), h('i', { class: 'sep' }),
+      appBtn('phone', 'phone'), appBtn('music', 'music'), appBtn('camera', 'camera'), appBtn('toybox', 'toybox'),
+      appBtn('theater', 'theater'), appBtn('apps', 'apps'), h('i', { class: 'sep' }),
       h('button', { class: 'dockbtn flat', title: 'Bluetooth', onclick: () => openApp('controls') }, dockGlyph('bluetooth')), road),
     h('div', { class: 'dgrp r' }, right, volRow, theme, full));
 }

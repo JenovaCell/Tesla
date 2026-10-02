@@ -6,13 +6,20 @@ export const MPH = 0.44704;
 
 export const ENVS = {
   highway: {
-    name: 'highway', fwd: 4, onc: 0, laneW: 3.7, median: 0, limit: 70, dens: 0.045, vmean: 0.93,
-    curvy: 1, lights: false, parked: false,
+    name: 'highway', fwd: 4, onc: 0, laneW: 3.7, median: 0, limit: 75, dens: 0.014, vmean: 0.97,
+    curvy: 0.7, lights: false, parked: false, oncRate: 0,
     mix: [['sedan', 0.42], ['suv', 0.3], ['pickup', 0.1], ['semi', 0.1], ['box', 0.08]],
   },
+  // wide boulevard: two lanes each way, a few signals far apart, light traffic
+  arterial: {
+    name: 'arterial', fwd: 2, onc: 2, laneW: 3.6, median: 3.6, limit: 50, dens: 0.014, vmean: 0.96,
+    curvy: 0.35, lights: true, parked: false, spacing: 780, oncRate: 0.2,
+    mix: [['sedan', 0.44], ['suv', 0.32], ['pickup', 0.12], ['van', 0.06], ['box', 0.06]],
+  },
+  // neighbourhood / town streets
   city: {
-    name: 'city', fwd: 2, onc: 2, laneW: 3.4, median: 3.2, limit: 35, dens: 0.05, vmean: 0.9,
-    curvy: 0.5, lights: true, parked: true,
+    name: 'city', fwd: 2, onc: 2, laneW: 3.4, median: 3.2, limit: 35, dens: 0.02, vmean: 0.92,
+    curvy: 0.5, lights: true, parked: true, spacing: 420, parkedRate: 0.4, oncRate: 0.22,
     mix: [['sedan', 0.46], ['suv', 0.32], ['pickup', 0.09], ['van', 0.07], ['box', 0.06]],
   },
 };
@@ -83,14 +90,14 @@ export class World {
     this.leftEdge = e.onc ? -fMax : fMin;
     // intersections (city)
     this.inter = [];
-    if (e.lights) for (let k = 0; k < 400; k++) this.inter.push({ k, s: 150 + k * 175 + (k % 3) * 11, phase: (k * 13.7) % 44, crossT: 0, pedT: 0 });
+    if (e.lights) for (let k = 0; k < 400; k++) this.inter.push({ k, s: 150 + k * (e.spacing || 175) + (k % 3) * 17, phase: (k * 13.7) % 44, crossT: 0, pedT: 0 });
     this._ensure(400);
   }
   _pickCurv() {
     // alternate straights and gentle bends
     const r = this.rng, c = this.env.curvy;
     if (this._k !== 0 || r() < 0.25) { this._k = 0; return [180 + r() * 380, 0]; }
-    const R = (this.env.name === 'city' ? 180 + r() * 220 : 450 + r() * 900) / Math.max(0.3, c);
+    const R = (this.env.name === 'city' ? 180 + r() * 220 : this.env.name === 'arterial' ? 320 + r() * 500 : 600 + r() * 1100) / Math.max(0.3, c);
     return [90 + r() * 200, (r() < 0.5 ? -1 : 1) / R];
   }
   _ensure(sMax) {
@@ -273,7 +280,7 @@ export class World {
     this.limit = this.env.limit;
 
     // ---- ego longitudinal ----
-    const prof = this.profile === 'hurry' ? 1.12 : this.profile === 'chill' ? 0.92 : 1.0;
+    const prof = this.profile === 'hurry' ? (this.env.name === 'highway' ? 1.07 : 1.1) : this.profile === 'chill' ? 0.92 : 1.0;
     let v0 = this.limit * MPH * prof;
     // slow for curves
     const pa = this.path(ego.s).th, pb = this.path(ego.s + 40).th, kk = Math.abs(pb - pa) / 40;
@@ -346,7 +353,7 @@ export class World {
     this.spawnTimer = 0.6;
     const fwd = this.vehicles.filter((v) => v.dir === 1);
     for (let li = 0; li < this.lanes.length; li++) {
-      if (this.rng() > Math.min(0.9, e.dens * 40 * Math.max(0.3, ego.v / 28))) continue;
+      if (this.rng() > Math.min(0.9, e.dens * 0.6 * Math.max(6, ego.v))) continue;
       const sFar = ego.s + 310, sNear = ego.s - 95;
       const clear = (s) => !fwd.some((b) => b.lane === li && Math.abs(b.s - s) < b.len + 16 + b.v * 0.65);
       const v0 = this._laneV0(li, 1);
@@ -358,7 +365,7 @@ export class World {
       }
     }
     for (let li = 0; li < this.oncLanes.length; li++) {
-      if (this.rng() > 0.55) continue;
+      if (this.rng() > (e.oncRate ?? 0.3)) continue;
       const sFar = ego.s + 330;
       if (!this.vehicles.some((b) => b.dir === -1 && b.lane === li && Math.abs(b.s - sFar) < 30 + b.v * 1.2)) {
         const v0 = this._laneV0(li, -1);
@@ -370,7 +377,7 @@ export class World {
       this._parkedUntil = this._parkedUntil ?? ego.s - 60;
       while (this._parkedUntil < ego.s + 320) {
         this._parkedUntil += 9 + this.rng() * 22;
-        if (this.rng() < 0.7) {
+        if (this.rng() < (e.parkedRate ?? 0.7)) {
           const side = this.rng() < 0.55 ? 1 : -1;
           const type = this._pickType();
           const p = this._makeVehicle(type, { s: this._parkedUntil, d: side * (this.rightEdge + 1.5), parked: true, v: 0, dir: side === 1 ? 1 : -1 });
