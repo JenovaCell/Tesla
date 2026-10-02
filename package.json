@@ -23,7 +23,7 @@
       "preload.js",
       "src/**/*",
       "node_modules/three/build/**/*",
-      "node_modules/three/examples/jsm/environments/**/*"
+      "node_modules/three/examples/jsm/environments/**/*", "node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js", "node_modules/three/examples/jsm/utils/BufferGeometryUtils.js"
     ],
     "win": {
       "target": [

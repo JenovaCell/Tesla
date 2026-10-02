@@ -5,12 +5,12 @@ import { buildVehicle, buildPedestrian, buildTrafficLight } from './models3d.js'
 
 const THEMES = {
   dark: {
-    bg: 0x0a0a0d, ground: 0x2b2a30, shoulder: 0x202025, road: 0x0e0e11, line: 0xf0f0f4, yellow: 0xe0ae3c,
-    npc: 0xc4c4cc, npcA: 0.93, glass: 0x23242a, ego: 0x1c1d21, blue: [0.18, 0.46, 1.0], amb: 1.15, sun: 0.7, cross: 0x131316,
+    bg: 0x08080a, ground: 0x15151a, shoulder: 0x1b1b20, road: 0x0c0c0f, line: 0xf0f0f4, yellow: 0xe0ae3c,
+    npc: 0xd6d3cf, npcA: 1, glass: 0x23242a, ego: 0x1c1d21, blue: [0.18, 0.46, 1.0], amb: 1.15, sun: 0.7, cross: 0x0c0c0f,
   },
   light: {
     bg: 0xdcdce1, ground: 0xe9e9ed, shoulder: 0xd9d9df, road: 0xbdbdc6, line: 0xffffff, yellow: 0xd9a52b,
-    npc: 0xf6f6f8, npcA: 0.9, glass: 0x9a9ca6, ego: 0x202126, blue: [0.16, 0.42, 0.98], amb: 1.25, sun: 0.55, cross: 0xb6b6bf,
+    npc: 0xa9a9ae, npcA: 1, glass: 0x9a9ca6, ego: 0x202126, blue: [0.16, 0.42, 0.98], amb: 1.25, sun: 0.55, cross: 0xbdbdc6,
   },
 };
 
@@ -104,12 +104,13 @@ export class DriveScene {
     this.shoulderR = new Strip(130, this.shoulderL.mesh.material, 1);
     this.roadStrip = new Strip(130, this.shoulderL.mesh.material, 2);
     this.solid = [0, 1, 2, 3, 4].map(() => new Strip(130, this.shoulderL.mesh.material, 3));
+    this.glowStrips = [0, 1].map(() => new Strip(130, this.shoulderL.mesh.material, 2.5));
     this.dashes = new Quads(260, this.matLine, 3);
     this.cross = new Quads(6, this.matCross, 4);
     this.stripes = new Quads(120, this.matStripe, 5);
     this.pathStrip = new Strip(60, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide }), 6);
-    for (const o of [this.shoulderL, this.shoulderR, this.roadStrip, ...this.solid, this.dashes, this.cross, this.stripes, this.pathStrip]) this.scene.add(o.mesh);
-    this.roadGroupObjs = [this.ground, this.shoulderL.mesh, this.shoulderR.mesh, this.roadStrip.mesh, ...this.solid.map((s) => s.mesh), this.dashes.mesh, this.cross.mesh, this.stripes.mesh, this.pathStrip.mesh];
+    for (const o of [this.shoulderL, this.shoulderR, this.roadStrip, ...this.glowStrips, ...this.solid, this.dashes, this.cross, this.stripes, this.pathStrip]) this.scene.add(o.mesh);
+    this.roadGroupObjs = [this.ground, this.shoulderL.mesh, this.shoulderR.mesh, this.roadStrip.mesh, ...this.glowStrips.map((s) => s.mesh), ...this.solid.map((s) => s.mesh), this.dashes.mesh, this.cross.mesh, this.stripes.mesh, this.pathStrip.mesh];
 
     // terrain blobs
     this.blobs = [];
@@ -144,7 +145,7 @@ export class DriveScene {
     this.theme = t; const T = THEMES[t];
     this.T = T;
     this.groundMat.color.set(T.ground); this.matCross.color.set(T.cross); this.matLine.color.set(T.line); this.matStripe.color.set(T.line); this.matYellow.color.set(T.yellow);
-    this.blobMat.color.set(t === 'dark' ? 0x34333a : 0xdcdce2);
+    this.blobMat.color.set(t === 'dark' ? 0x1d1d22 : 0xdcdce2);
     this.amb.intensity = T.amb; this.sun.intensity = T.sun;
     this.amb.color.set(t === 'dark' ? 0xcfd2e6 : 0xffffff); this.amb.groundColor.set(t === 'dark' ? 0x55565e : 0xaaaab4);
     this._applyBackground();
@@ -169,32 +170,28 @@ export class DriveScene {
     if (this.egoMesh) this.scene.remove(this.egoMesh);
     if (this.heroMesh) this.scene.remove(this.heroMesh);
     // the ego is drawn dark in the driving view (tinted by the paint), like the real visualisation
-    const dark = new THREE.Color(hex).multiplyScalar(0.16).add(new THREE.Color(0x0e0f12));
-    this.egoMesh = buildVehicle(type, { body: dark.getHex(), glass: 0x07080a, transparent: true });
+    const dark = new THREE.Color(hex).multiplyScalar(0.22).add(new THREE.Color(0x2c2d32));
+    this.egoMesh = buildVehicle(type, { variant: 'ego', tint: dark.getHex(), transparent: true });
     this.egoMesh.renderOrder = 11;
     // inverted-hull outline so the ego reads against the dark road (like the real visualisation)
-    const hullMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.55, depthWrite: false });
-    const parts = this.egoMesh.children.slice(0, 2);
-    parts.forEach((m) => { m.renderOrder = 3; const h = new THREE.Mesh(m.geometry, hullMat); h.renderOrder = 2; h.position.copy(m.position); h.scale.set(1.05, 1.08, 1.016); h.position.y -= 0.02; this.egoMesh.add(h); });
+    const hullMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.5, depthWrite: false });
+    const body = this.egoMesh.children[0]; body.renderOrder = 3;
+    const hull = new THREE.Mesh(body.geometry, hullMat); hull.renderOrder = 2; hull.scale.set(1.045, 1.07, 1.014); hull.position.y = -0.02; this.egoMesh.add(hull);
     this.egoHull = hullMat;
-    this.heroMesh = buildVehicle(type, { body: hex, glass: 0x07080b, hero: true, envMap: this.envTex });
+    this.heroMesh = buildVehicle(type, { variant: 'hero', tint: hex, envMap: this.envTex });
     this.heroMesh.visible = false;
     this.scene.add(this.egoMesh, this.heroMesh);
   }
 
   _tint(mesh, ent) {
-    const T = this.T;
-    const base = new THREE.Color(T.npc);
-    const k = 0.9 + (ent?.hue ?? 0.5) * 0.18;
+    const base = new THREE.Color(this.T.npc);
+    const k = 0.92 + (ent?.hue ?? 0.5) * 0.14;
     mesh.userData.bodyMat.color.copy(base).multiplyScalar(k);
-    mesh.userData.bodyMat.emissive.copy(base).multiplyScalar(k * (this.theme === 'dark' ? 0.34 : 0.12));
-    mesh.userData.glassMat.color.set(mesh.userData.bodyGlass ? base.clone().multiplyScalar(k * 0.93) : T.glass);
-    mesh.userData.glassMat.emissive.copy(base).multiplyScalar(k * (this.theme === 'dark' ? 0.26 : 0.1));
   }
   _getVeh(v) {
     let e = this.vehMeshes.get(v.id);
     if (!e) {
-      const mesh = buildVehicle(v.type, { body: this.T.npc, glass: this.T.glass, opacity: this.T.npcA, transparent: true, bodyGlass: true });
+      const mesh = buildVehicle(v.type, { variant: 'npc', tint: this.T.npc, opacity: this.T.npcA, transparent: true });
       mesh.renderOrder = 10;
       this.scene.add(mesh);
       e = { mesh, ent: v, seen: 0 }; this.vehMeshes.set(v.id, e); this._tint(mesh, v);
@@ -221,7 +218,7 @@ export class DriveScene {
     this.cam.lookAt(0, 0.55, 0);
     this.egoMesh.visible = false;
     this.heroMesh.visible = true; this.heroMesh.position.set(0, 0, 0); this.heroMesh.rotation.set(0, 0, 0);
-    this.heroMesh.userData.tailMat.color.set(0xb01818);
+    this.heroMesh.userData.tailMat.color.set(0xb01818); this.heroMesh.userData.brakeGlow.material.opacity = 0;
     this.cam.fov = fov; this.cam.updateProjectionMatrix();
     this.cam.lookAt(0, 0.55, 0);
     this.r.render(this.scene, this.cam);
@@ -252,7 +249,7 @@ export class DriveScene {
     // framing: portrait panel (split layout) vs wide (full layout)
     const aspect = this.w / Math.max(1, this.h);
     const wide = clamp01((aspect - 0.75) / 1.0);
-    const fov = 34 - wide * 8, camH = 8.8 + wide * 3.2, camZ = 32 + wide * 13, look = -6 - wide * 2;
+    const fov = 36 + wide * 12, camH = 13.5 - wide * 3, camZ = 34 - wide * 10, look = -12 + wide * 2;
     if (Math.abs(this.cam.fov - fov) > 0.01) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
     this.cam.position.set(this.camX, camH, camZ);
     this.cam.lookAt(this.lookX, 0.0, look);
@@ -277,20 +274,26 @@ export class DriveScene {
     edgeStrip(this.shoulderR, edgeR + roadHalfPad, edgeR + roadHalfPad + sh, [sr, sg, sb], 0.005);
 
     // lines
-    const lw = 0.16, white = hex3(T.line), yellow = hex3(T.yellow);
-    const solids = []; const dashes = [];
+    const lw = 0.22, white = hex3(T.line), yellow = hex3(T.yellow);
+    const solids = []; const dashes = []; const glows = [];
     if (env.name === 'highway') {
-      solids.push([edgeL + 0.05, yellow], [edgeR - 0.05, white]);
+      solids.push([edgeL + 0.2, yellow], [edgeL + 0.62, yellow], [edgeR - 0.05, white]);
+      glows.push(edgeL + 0.41);
       for (let i = 1; i < env.fwd; i++) dashes.push(world.lanes[i].d - env.laneW / 2);
     } else {
       const m = env.median / 2;
-      solids.push([-m, yellow], [m, yellow], [edgeL + 0.05, white], [edgeR - 0.05, white]);
+      solids.push([-m - 0.1, yellow], [m + 0.1, yellow], [edgeL + 0.05, white], [edgeR - 0.05, white]);
+      glows.push(-m - 0.1, m + 0.1);
       dashes.push(world.lanes[0].d + env.laneW / 2, world.oncLanes[0].d - env.laneW / 2);
     }
     this.solid.forEach((st, i) => {
       const L = solids[i];
       if (!L) { st.finish(0); return; }
       edgeStrip(st, L[0] - lw / 2, L[0] + lw / 2, L[1], 0.02);
+    });
+    this.glowStrips.forEach((st, i) => {
+      if (glows[i] == null) { st.finish(0); return; }
+      edgeStrip(st, glows[i] - 0.55, glows[i] + 0.55, [yellow[0], yellow[1], yellow[2]], 0.015, 0.2);
     });
     // dashed
     this.dashes.reset();
@@ -321,8 +324,7 @@ export class DriveScene {
         this.stripes.add(at(sl, dL), at(sl, dR), at(sl + 0.5, dR), at(sl + 0.5, dL), 0.03);
         // crosswalk zebra
         for (let d = edgeL + 0.6; d < edgeR - 0.2; d += 1.15) {
-          const a = it.s - 7.6, b = it.s - 4.6;
-          this.stripes.add(at(a, d), at(a, d + 0.6), at(b, d + 0.6), at(b, d), 0.03);
+          for (const [a, b] of [[it.s - 7.6, it.s - 4.6], [it.s + 4.6, it.s + 7.6]]) this.stripes.add(at(a, d), at(a, d + 0.6), at(b, d + 0.6), at(b, d), 0.03);
         }
         if (li < this.lightObjs.length && rel > -15 && rel < 220) {
           const L = this.lightObjs[li++]; const p = at(it.s + 7.5, edgeR + 1.2);
@@ -362,6 +364,8 @@ export class DriveScene {
     const u = em.userData;
     const br = ego.brake;
     u.tailMat.color.setRGB(0.45 + br * 0.55, 0.06, 0.06);
+    u.brakeGlow.material.opacity = br * 0.65;
+    if (u.headGlow) u.headGlow.material.opacity = this.theme === 'dark' ? 0.5 : 0.18;
 
     // ---- other vehicles ----
     const all = world.vehicles.concat(world.getCross());
@@ -380,6 +384,7 @@ export class DriveScene {
       const mu = m.userData;
       const front = v.dir === -1 || v.cross;                // we see their fronts: dim the red bar
       mu.tailMat.color.setRGB(front ? 0.2 : 0.4 + v.brake * 0.6, 0.06, 0.06);
+      mu.brakeGlow.material.opacity = front ? 0 : v.brake * 0.5;
       const blink = (Math.floor(this.t * 2.6) % 2) === 0;
       mu.blinkL.material.opacity = v.signal < 0 && blink ? 1 : 0; mu.blinkR.material.opacity = v.signal > 0 && blink ? 1 : 0;
     }

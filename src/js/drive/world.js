@@ -8,18 +8,18 @@ export const ENVS = {
   highway: {
     name: 'highway', fwd: 4, onc: 0, laneW: 3.7, median: 0, limit: 70, dens: 0.045, vmean: 0.93,
     curvy: 1, lights: false, parked: false,
-    mix: [['sedan', 0.45], ['suv', 0.3], ['pickup', 0.1], ['semi', 0.15]],
+    mix: [['sedan', 0.42], ['suv', 0.3], ['pickup', 0.1], ['semi', 0.1], ['box', 0.08]],
   },
   city: {
     name: 'city', fwd: 2, onc: 2, laneW: 3.4, median: 3.2, limit: 35, dens: 0.05, vmean: 0.9,
     curvy: 0.5, lights: true, parked: true,
-    mix: [['sedan', 0.5], ['suv', 0.33], ['pickup', 0.1], ['van', 0.07]],
+    mix: [['sedan', 0.46], ['suv', 0.32], ['pickup', 0.09], ['van', 0.07], ['box', 0.06]],
   },
 };
 
 export const CAR_SIZE = {
   sedan: { len: 4.7, wid: 1.9 }, suv: { len: 4.9, wid: 2.0 }, pickup: { len: 5.6, wid: 2.1 },
-  van: { len: 5.4, wid: 2.0 }, semi: { len: 17, wid: 2.55 },
+  van: { len: 5.4, wid: 2.0 }, semi: { len: 17, wid: 2.55 }, box: { len: 7.4, wid: 2.45 },
 };
 
 function mulberry32(a) {

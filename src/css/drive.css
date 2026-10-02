@@ -144,3 +144,9 @@
 .drive[data-mode="full"] .limit { margin-top: 12px; }
 .drive[data-mode="park"] .fsd-full { display: none; }
 .minimap { background: transparent !important; }
+
+/* soft vignette + fade toward the camera, like the real display */
+.drive .viz::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 52%, transparent 58%, rgba(0,0,0,.5) 100%), linear-gradient(to bottom, transparent 70%, var(--viz-bg) 100%); opacity: 0; transition: opacity .5s; }
+:root[data-theme="dark"] .drive:not([data-mode="park"]) .viz::after { opacity: 1; }
+:root[data-theme="light"] .drive:not([data-mode="park"]) .viz::after { opacity: .55; background: linear-gradient(to bottom, transparent 72%, var(--viz-bg) 100%); }
