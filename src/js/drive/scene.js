@@ -1,7 +1,8 @@
 // Three.js renderer for the driving visualisation and the parked 3/4 view.
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildVehicle, buildPedestrian, buildTrafficLight } from './models3d.js';
+import { buildEgo, makeStudioEnv } from './ego.js';
+import { vehicleSize } from './models3d.js';
 
 const THEMES = {
   dark: {
@@ -74,9 +75,7 @@ export class DriveScene {
     this.r.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.r.setClearColor(0x000000, 0);
     this.scene = new THREE.Scene();
-    const pm = new THREE.PMREMGenerator(this.r);
-    this.envTex = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    pm.dispose();
+    this.envTex = makeStudioEnv(this.r, 'dark');
     this.cam = new THREE.PerspectiveCamera(40, 1, 0.5, 700);
     this.theme = 'dark';
     this.mode = 'drive';
@@ -150,6 +149,17 @@ export class DriveScene {
     this.amb.color.set(t === 'dark' ? 0xcfd2e6 : 0xffffff); this.amb.groundColor.set(t === 'dark' ? 0x55565e : 0xaaaab4);
     this._applyBackground();
     for (const m of this.vehMeshes.values()) this._tint(m.mesh, m.ent);
+    if (this.envTex) this.envTex.dispose();
+    this.envTex = makeStudioEnv(this.r, t);
+    this.egoMesh?.userData.setEnv(this.envTex);
+    if (this.floorFx) { this.floorFx.material.map?.dispose(); this.floorFx.material.map = this._floorTexture(t === 'dark' ? '26,27,33' : '236,238,242'); this.floorFx.material.needsUpdate = true; }
+  }
+  _floorTexture(rgb) {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const x = c.getContext('2d'); const g = x.createRadialGradient(128, 128, 10, 128, 128, 126);
+    g.addColorStop(0, `rgba(${rgb},0.9)`); g.addColorStop(0.55, `rgba(${rgb},0.72)`); g.addColorStop(1, `rgba(${rgb},0)`);
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    return new THREE.CanvasTexture(c);
   }
   _applyBackground() {
     const T = this.T;
@@ -162,25 +172,33 @@ export class DriveScene {
     this.blobs.forEach((b) => (b.visible = false));
     this.shadow.visible = m === 'park';
     if (m === 'park') for (const v of this.vehMeshes.values()) v.mesh.visible = false;
-    this.egoMesh.visible = m === 'drive'; this.heroMesh.visible = m === 'park';
+    this.egoMesh.visible = true;
+    if (this.floorFx) { this.floorFx.visible = m === 'park'; this.reflect.visible = m === 'park'; }
     this._applyBackground();
   }
   setPaint(hex, type = 'model3') {
     this.paint = hex; this.carType = type;
     if (this.egoMesh) this.scene.remove(this.egoMesh);
-    if (this.heroMesh) this.scene.remove(this.heroMesh);
-    // The car being driven is drawn in its real paint and model, glossy, like the real display.
-    this.egoMesh = buildVehicle(type, { variant: 'ego', tint: hex, envMap: this.envTex, transparent: true });
+    if (this.reflect) this.scene.remove(this.reflect);
+    // The car being driven: the real model in its real paint, with glass over an interior, glossy reflections.
+    this.egoMesh = buildEgo(type, { tint: hex, envMap: this.envTex, transparent: true, headGlow: true });
     this.egoMesh.renderOrder = 11;
-    this.egoMesh.userData.bodyMat.emissive = new THREE.Color(hex).multiplyScalar(0.27);   // keep the paint lively on dark roads
     // faint inverted-hull rim so very dark paints still read against the dark road
-    const hullMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.22, depthWrite: false });
-    const body = this.egoMesh.children[0]; body.renderOrder = 3;
-    const hull = new THREE.Mesh(body.geometry, hullMat); hull.renderOrder = 2; hull.scale.set(1.035, 1.05, 1.01); hull.position.y = -0.015; this.egoMesh.add(hull);
+    const hullMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.2, depthWrite: false });
+    const body = this.egoMesh.children[0];
+    const hull = new THREE.Mesh(body.geometry, hullMat); hull.renderOrder = 2; hull.scale.set(1.03, 1.045, 1.01); hull.position.y = -0.015; this.egoMesh.add(hull);
     this.egoHull = hullMat;
-    this.heroMesh = buildVehicle(type, { variant: 'hero', tint: hex, envMap: this.envTex });
-    this.heroMesh.visible = false;
-    this.scene.add(this.egoMesh, this.heroMesh);
+    this.scene.add(this.egoMesh);
+    // mirror image under the car (parked view) fading into the floor
+    this.reflect = this.egoMesh.clone(true); this.reflect.renderOrder = -1; this.reflect.scale.y = -1;
+    this.reflect.traverse((o) => { if (o.material && o.material === hullMat) o.visible = false; });
+    this.reflect.visible = this.mode === 'park';
+    this.scene.add(this.reflect);
+    if (!this.floorFx) {
+      this.floorFx = new THREE.Mesh(new THREE.PlaneGeometry(30, 30).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: this._floorTexture('26,27,33'), transparent: true, depthWrite: false }));
+      this.floorFx.position.y = 0.004; this.floorFx.renderOrder = 5; this.floorFx.visible = this.mode === 'park';
+      this.scene.add(this.floorFx);
+    }
   }
 
   _tint(mesh, ent) {
@@ -208,19 +226,21 @@ export class DriveScene {
   /* ----------------------------------------------------------------- */
   renderPark(dt, ctx) {
     this.t += dt; this.frame = (this.frame || 0) + 1;
-    const ang = 0.55 + Math.sin(this.t * 0.35) * 0.28 + (ctx?.drag ?? this.dragAng ?? 0);
-    const fov = 30, aspect = this.w / Math.max(1, this.h);
+    const { len: CL, wid: CW } = vehicleSize(this.carType || 'model3');
+    const ang = 0.62 + Math.sin(this.t * 0.35) * 0.3 + (ctx?.drag ?? this.dragAng ?? 0);
+    const fov = 28, aspect = this.w / Math.max(1, this.h);
     const hfov = 2 * Math.atan(Math.tan((fov * Math.PI) / 360) * aspect);
-    const ext = 4.72 * Math.abs(Math.sin(ang)) + 1.95 * Math.abs(Math.cos(ang));
-    const R = Math.max(9.6, ext / 0.86 / (2 * Math.tan(hfov / 2)) + 1.0);
-    const H = Math.max(1.9, R * 0.2);
+    const ext = CL * Math.abs(Math.sin(ang)) + CW * Math.abs(Math.cos(ang));
+    const R = Math.max(9.2, ext / 0.84 / (2 * Math.tan(hfov / 2)) + 1.0);
+    const H = 1.35 + R * 0.075;
     this.cam.position.set(-Math.sin(ang) * R, H, -Math.cos(ang) * R);
-    this.cam.lookAt(0, 0.55, 0);
-    this.egoMesh.visible = false;
-    this.heroMesh.visible = true; this.heroMesh.position.set(0, 0, 0); this.heroMesh.rotation.set(0, 0, 0);
-    this.heroMesh.userData.tailMat.color.set(0xb01818); this.heroMesh.userData.brakeGlow.material.opacity = 0;
-    this.cam.fov = fov; this.cam.updateProjectionMatrix();
-    this.cam.lookAt(0, 0.55, 0);
+    const em = this.egoMesh; em.visible = true; em.position.set(0, 0, 0); em.rotation.set(0, 0, 0);
+    em.userData.tailMat.color.set(0xa01414); em.userData.brakeGlow.material.opacity = 0; em.userData.blinkL.material.opacity = em.userData.blinkR.material.opacity = 0;
+    if (em.userData.headGlow) em.userData.headGlow.material.opacity = 0;
+    this.egoHull && (this.egoHull.opacity = 0);
+    this.reflect.position.set(0, 0, 0); this.reflect.rotation.set(0, 0, 0);
+    if (this.cam.fov !== fov) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
+    this.cam.lookAt(0, 0.5, 0);
     this.r.render(this.scene, this.cam);
   }
   /** projected screen position of a point on the parked car (for callouts) */
@@ -356,7 +376,6 @@ export class DriveScene {
     for (; bi < this.blobs.length; bi++) this.blobs[bi].visible = false;
 
     // ---- ego ----
-    this.heroMesh.visible = false;
     const em = this.egoMesh; em.visible = true;
     const ego_th = world.path(sE).th + ego.yawOff;
     em.position.set(egoLoc[0], 0, egoLoc[1]);

@@ -16,15 +16,15 @@ const EGO_SIZE = {
 export const vehicleSize = (t) => CAR_SIZE[t] || EGO_SIZE[t];
 const isEgoModel = (t) => !!EGO_SIZE[t];
 
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+export const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
-function lerpPts(pts, x) {
+export function lerpPts(pts, x) {
   if (x <= pts[0][0]) return pts[0][1];
   for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0); }
   return pts[pts.length - 1][1];
 }
-function prof(pts, x, r) {          // smoothed piecewise-linear profile
+export function prof(pts, x, r) {          // smoothed piecewise-linear profile
   const k = [-2, -1, 0, 1, 2], w = [1, 2, 3, 2, 1];
   let a = 0, b = 0;
   for (let i = 0; i < 5; i++) { a += lerpPts(pts, x + k[i] * r * 0.5) * w[i]; b += w[i]; }
@@ -32,7 +32,7 @@ function prof(pts, x, r) {          // smoothed piecewise-linear profile
 }
 
 // Side profiles: x from the rear (0) to the nose (L). belt = shoulder line (hood/trunk top); roof = roofline.
-const SPEC = {
+export const SPEC = {
   sedan: {
     belt: [[0, 0.8], [0.15, 0.92], [0.8, 0.99], [1.9, 1.0], [3.3, 0.98], [3.9, 0.9], [4.4, 0.78], [4.72, 0.58]],
     roof: [[0, 0], [0.85, 0.99], [1.3, 1.18], [1.75, 1.34], [2.15, 1.42], [2.6, 1.45], [2.95, 1.4], [3.3, 1.22], [3.62, 0.98], [4.72, 0]],
@@ -79,10 +79,11 @@ SPEC.cybertruck = {
 };
 
 const NST = 56, KH = 22;
-const bodyHalfWidth = (x, L, hw0) => Math.max(0.01, hw0 * Math.pow(Math.max(0, 1 - Math.pow(Math.abs((2 * x) / L - 1), 10)), 0.3) * (1 - 0.1 * sstep(0.55, 1, x / L)));       // stations along the car, points per half cross-section
+export const bodyHalfWidth = (x, L, hw0) => Math.max(0.01, hw0 * Math.pow(Math.max(0, 1 - Math.pow(Math.abs((2 * x) / L - 1), 10)), 0.3) * (1 - 0.1 * sstep(0.55, 1, x / L)));       // stations along the car, points per half cross-section
 
-function buildBodyGeometry(type) {
+export function buildBodyGeometry(type, o = {}) {
   const { len: L, wid: W } = vehicleSize(type), sp = SPEC[type], hw0 = W / 2;
+  const nst = o.nst ?? NST, kh = o.kh ?? KH;
   const facet = !!sp.facet;
   const pos = [], info = [], rings = [];
   let cabRange = [Infinity, -Infinity];
@@ -93,7 +94,7 @@ function buildBodyGeometry(type) {
     for (const [x] of sp.belt) set.add(x);
     for (const [x, y] of sp.roof) if (y > 0 && x > 0 && x < L) set.add(x);
     xs = [...set].sort((a, b) => a - b);
-  } else for (let i = 0; i <= NST; i++) xs.push(((1 - Math.cos((Math.PI * i) / NST)) / 2) * L);
+  } else for (let i = 0; i <= nst; i++) xs.push(((1 - Math.cos((Math.PI * i) / nst)) / 2) * L);
   const nS = xs.length - 1;
   for (let i = 0; i <= nS; i++) {
     const x = xs[i];
@@ -114,7 +115,7 @@ function buildBodyGeometry(type) {
         [0, y0], [w * 0.78, y0 + 0.015], [w * 0.96, y0 + 0.12], [w, (y0 + belt) * 0.5], [w * 0.985, belt - 0.07],
         [w * 0.93, belt + 0.015], [w * cw, belt + cabin * 0.14], [w * cw * 0.92, belt + cabin * 0.6], [w * cw * 0.8, top - 0.05], [w * cw * 0.46, top - 0.008], [0, top],
       ].map((p) => new THREE.Vector2(p[0], p[1]));
-      half = new THREE.SplineCurve(ctl).getSpacedPoints(KH);
+      half = new THREE.SplineCurve(ctl).getSpacedPoints(kh);
     }
     const ring = [];
     const pushPt = (px, py) => { pos.push(px, py, L / 2 - x); info.push({ x, belt, cab, y0 }); ring.push(info.length - 1); };
@@ -133,6 +134,19 @@ function buildBodyGeometry(type) {
     pos.push(cx / K, cy / K, cz / K); info.push(info[ring[0]]); const ci = info.length - 1;
     for (let k = 0; k < K; k++) flip ? idx.push(ci, ring[(k + 1) % K], ring[k]) : idx.push(ci, ring[k], ring[(k + 1) % K]);
   }
+  // wheel arches: scoop the body side inward around each wheel
+  if (o.arches && !facet) {
+    for (let i = 0; i < pos.length; i += 3) {
+      const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+      for (const a of o.arches) {
+        const Ra = a.r * (a.k ?? 1.3), d = Math.hypot(z - a.z, y - a.r);
+        if (d < Ra && Math.abs(x) > hw0 * 0.45) {
+          const t = sstep(Ra, Ra * 0.35, d);
+          pos[i] -= Math.sign(x) * Math.min(Math.abs(x) - hw0 * 0.45, (a.depth ?? 0.27) * t);
+        }
+      }
+    }
+  }
   let g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx);
@@ -143,27 +157,40 @@ function buildBodyGeometry(type) {
     outInfo = Array.from(ia, (i) => info[i]);
   }
   g.computeVertexNormals();
-  g.userData = { info: outInfo, cabRange };
+  g.userData = { info: outInfo, cabRange, rings: facet ? null : rings, xs, L, W, facet };
   return g;
 }
 
 const LDIR = new THREE.Vector3(-0.35, 0.85, -0.4).normalize();
-/** Bake glass / pillars / AO / soft shading into a colour attribute. */
-function bakeBody(g, o) {
+/** Per-vertex glass amount (0 = paint, 1 = glass), including roof glass and door pillars. */
+export function glassFactor(g, glassRoof) {
   const P = g.attributes.position, N = g.attributes.normal, { info, cabRange } = g.userData;
-  const col = new Float32Array(P.count * 3);
+  const out = new Float32Array(P.count);
   const span = cabRange[1] - cabRange[0];
   const xB = cabRange[0] + span * 0.52, xC = cabRange[0] + span * 0.1;
   for (let i = 0; i < P.count; i++) {
-    const nx = N.getX(i), ny = N.getY(i), nz = N.getZ(i), y = P.getY(i), f = info[i];
+    const nx = N.getX(i), ny = N.getY(i), y = P.getY(i), f = info[i];
     let gl = 0;
     if (f.cab > 0.12) {
       const m = sstep(0.025, 0.13, y - f.belt);
-      gl = m * Math.max(sstep(0.97, 0.78, ny), o.glassRoof ? 1 : 0);
+      gl = m * Math.max(sstep(0.97, 0.78, ny), glassRoof ? 1 : 0);
       const side = sstep(0.25, 0.7, Math.abs(nx));
       const pil = Math.max(1 - sstep(0.05, 0.11, Math.abs(f.x - xB)), 1 - sstep(0.05, 0.11, Math.abs(f.x - xC)));
       gl *= 1 - side * pil * 0.95;
     }
+    out[i] = gl;
+  }
+  return out;
+}
+
+/** Bake glass / pillars / AO / soft shading into a colour attribute. */
+function bakeBody(g, o) {
+  const P = g.attributes.position, N = g.attributes.normal, { info } = g.userData;
+  const col = new Float32Array(P.count * 3);
+  const glass = glassFactor(g, o.glassRoof);
+  for (let i = 0; i < P.count; i++) {
+    const nx = N.getX(i), ny = N.getY(i), nz = N.getZ(i), y = P.getY(i), f = info[i];
+    const gl = glass[i];
     let ao = 0.42 + 0.58 * sstep(f.y0 + 0.02, f.y0 + 0.6, y);
     ao *= 1 - 0.5 * sstep(-0.1, -0.5, ny);
     const shade = o.lit ? 0.5 + 0.5 * Math.max(0, nx * LDIR.x + ny * LDIR.y + nz * LDIR.z) : 1;
@@ -243,7 +270,7 @@ function glowTexture(rgb) {
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c); glowTex.set(rgb, t); return t;
 }
-function glowPlane(rgb, w, d) {
+export function glowPlane(rgb, w, d) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ map: glowTexture(rgb), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
   m.renderOrder = -1;

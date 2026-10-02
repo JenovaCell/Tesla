@@ -79,7 +79,7 @@ preload.js           safe bridge to the renderer
 src/index.html       shell (import map for three.js)
 src/css/app.css      themes + shared widgets        src/css/drive.css  drive display
 src/js/app.js        dock, apps, scaling, boot
-src/js/drive/        world.js (road + traffic + lights sim), scene.js (three.js renderer), models3d.js,
+src/js/drive/        world.js (road + traffic + lights sim), scene.js (three.js renderer), models3d.js, ego.js (detailed hero car),
                      hud.js (DOM overlays), director.js (trip loop), trip.js, fakemap.js, sound.js
 src/js/apps/*        Theater, Media, Toybox, Phone, Calendar, Energy, Camera
 reference/           frames from the screen recordings used to match the look
