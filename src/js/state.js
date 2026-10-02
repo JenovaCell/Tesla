@@ -15,7 +15,7 @@ export const store = createStore({
   pos: { lat: 37.3947, lng: -122.1503, name: 'Palo Alto, CA' },
   recents: [],
   // volatile (underscore = not persisted)
-  _gear: 'P', _speed: 0, _target: 0, _cabin: 72, _outside: 61, _route: null, _routeProgress: 0, _routeDist: 0,
+  _gear: 'P', _ap: false, _speed: 0, _target: 0, _cabin: 72, _outside: 61, _route: null, _routeProgress: 0, _routeDist: 0,
   _screenClean: false, _fullscreen: false, _nowPlaying: null,
 });
 
@@ -47,13 +47,16 @@ export function simTick(onRouteAdvance) {
   const st = store.state;
   const patch = {};
 
-  // speed model: ease toward target, brakes harder than accel
+  // speed model: ease toward target (skipped while the drive display owns the speed)
   const moving = st._gear === 'D' || st._gear === 'R';
-  const maxMph = st._gear === 'R' ? 8 : model().topMph;
-  const target = moving ? clamp(st._target, 0, maxMph) : 0;
-  const rate = target > st._speed ? (model().zeroTo60 < 3.5 ? 22 : 14) : 28;
-  let sp = st._speed + clamp(target - st._speed, -rate * dt, rate * dt);
-  if (Math.abs(sp - st._speed) > 0.01) patch._speed = sp < 0.05 ? 0 : sp;
+  let sp = st._speed;
+  if (!st._ap) {
+    const maxMph = st._gear === 'R' ? 8 : model().topMph;
+    const target = moving ? clamp(st._target, 0, maxMph) : 0;
+    const rate = target > st._speed ? (model().zeroTo60 < 3.5 ? 22 : 14) : 28;
+    sp = st._speed + clamp(target - st._speed, -rate * dt, rate * dt);
+    if (Math.abs(sp - st._speed) > 0.01) patch._speed = sp < 0.05 ? 0 : sp;
+  }
 
   if (sp > 0.1) {
     const miles = (sp / 3600) * dt;
@@ -61,7 +64,6 @@ export function simTick(onRouteAdvance) {
     patch.tripA = st.tripA + miles;
     patch.tripB = st.tripB + miles;
     patch.soc = clamp(st.soc - miles * (100 / model().rangeMi) * (0.9 + sp / 140), 0, 100);
-    if (st._gear === 'D' && onRouteAdvance) onRouteAdvance(miles * 1609.344);
   }
   // charging
   if (st.charging && st.chargePort && st._gear === 'P') {

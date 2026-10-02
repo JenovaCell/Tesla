@@ -1,5 +1,5 @@
 // Main process: window, fullscreen, Widevine DRM (castLabs Electron), permissions.
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, powerSaveBlocker } = require('electron');
 const path = require('path');
 
 // `components` only exists in the castLabs "wvcus" Electron build (Widevine CDM).
@@ -29,6 +29,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 500,
     backgroundColor: '#000000',
+    show: false,
     title: 'Tesla Screen Sim',
     autoHideMenuBar: true,
     webPreferences: {
@@ -40,6 +41,8 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  if (process.argv.includes('--fullscreen')) win.once('ready-to-show', () => win.setFullScreen(true));
+  win.once('ready-to-show', () => win.show());
   win.on('enter-full-screen', () => win.webContents.send('fullscreen-changed', true));
   win.on('leave-full-screen', () => win.webContents.send('fullscreen-changed', false));
 }
@@ -79,6 +82,8 @@ app.whenReady().then(async () => {
     try { await components.whenReady(); console.log('Widevine ready:', components.status()); }
     catch (err) { console.error('Widevine failed to initialise', err); }
   }
+  // A desk display must not dim or sleep while it is running.
+  powerSaveBlocker.start('prevent-display-sleep');
   configureSession(session.defaultSession);
   configureSession(session.fromPartition('persist:streaming'));
   createWindow();

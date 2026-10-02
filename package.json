@@ -5,10 +5,11 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable nsis"
+    "dist": "electron-builder --win portable nsis",
+    "kiosk": "electron . --fullscreen"
   },
   "dependencies": {
-    "leaflet": "^1.9.4"
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "electron": "github:castlabs/electron-releases#v43.5.0+wvcus",
@@ -21,7 +22,8 @@
       "main.js",
       "preload.js",
       "src/**/*",
-      "node_modules/leaflet/dist/**/*"
+      "node_modules/three/build/**/*",
+      "node_modules/three/examples/jsm/environments/**/*"
     ],
     "win": {
       "target": [
