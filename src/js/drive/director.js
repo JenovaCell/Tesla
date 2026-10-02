@@ -107,7 +107,7 @@ export class Director {
     store.set({ _gear: 'D' });
     this.sound.chime('engage');
     this.session = { miles: 0, kwh: 0, sec: 0 };
-    this.beginLeg('start', true, 0);
+    this.beginLeg(Trip.ALL_HIGHWAY ? 'highway' : 'start', true, 0);
   }
   beginLeg(name, fromRest, v0) {
     const seg = LEGS[name];
@@ -194,7 +194,7 @@ export class Director {
     // arrival: ease to a stop at the destination
     if (!ctl.stop) {
       const rem = this.trip.remaining;
-      if (rem < 260) ctl.stopGap = Math.max(1, rem - 7);
+      if (rem < 900) ctl.stopGap = Math.max(1, rem - 7);
     }
     w.update(dt, ctl);
     // events -> sound

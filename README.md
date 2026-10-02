@@ -49,7 +49,7 @@ The home screen is a live 3D Self-Driving visualisation, modelled on the real sc
   distances to each maneuver, miles remaining and the ETA all come from real road data; highway vs city legs are detected from the
   route's real speeds. Routes are cached after the first fetch. With no internet it falls back to an estimated route of the right length.
   The map backdrop itself is still stylised, only the route line and names are real.
-* **One long drive per trip** — press **Start Self-Driving** and the car pulls out of a driveway, drives a 35–45 minute (≈45 mile) trip (neighbourhood → highway → city streets), stops at the destination and waits in park. Press the button again for a new random destination. Optional hands-free mode: *Controls → Simulator → Auto-start the next drive*.
+* **One long drive per trip** — press **Start Self-Driving** and the car drives a 35–45 minute all-highway trip (ego capped at 80 mph, other drivers 60–100 mph by lane, light traffic; set `Trip.ALL_HIGHWAY = false` in `trip.js` for the town-streets version), stops at the destination and waits in park. Press the button again for a new random destination. Optional hands-free mode: *Controls → Simulator → Auto-start the next drive*.
   *Controls → Simulator → Auto-run Self-Driving demo*.
 * **Light / Dark / Auto** theme (moon/sun button on the dock). Graphics quality is under *Controls → Simulator*
   (Low / Balanced / High) if an older GPU struggles.

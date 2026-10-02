@@ -22,6 +22,7 @@ function rng(seed) {
 }
 
 export class Trip {
+  static ALL_HIGHWAY = true;     // the whole drive is open highway (set false to get town streets + arterials again)
   constructor(kind = 'highway', seed = 1) {
     this.base = kind;
     const r = rng(seed * 977 + 13);
@@ -109,6 +110,11 @@ export class Trip {
     const t = Object.create(Trip.prototype);
     Object.assign(t, { base: 'long', traveled: 0, total: r.total, dest: r.name, from: r.from, minutes: r.duration / 60, avgSpeed: r.total / r.duration,
       maneuvers: r.maneuvers, route: r.route, legs: r.legs, cumD: r.cumD, cumT: r.cumT, real: true, r: rng(7) });
+    if (Trip.ALL_HIGHWAY) {          // highway-only drive: keep just the ramps / exits / arrival that happen on the highway legs
+      const hw = r.legs.filter((l) => l.kind === 'highway');
+      const keep = r.maneuvers.filter((m) => m.type === 'arrive' || hw.some((l) => m.at >= l.start - 900 && m.at <= l.end + 150));
+      if (keep.length > 1) t.maneuvers = keep;
+    }
     return t;
   }
   /** estimated trip between two places when no route is available */
@@ -120,10 +126,20 @@ export class Trip {
       if (m.at > T0 - t.endDist - 0.5 * MI) m.at += road - T0; else if (m.at > t.startDist) m.at = t.startDist + (m.at - t.startDist) * k;
     }
     t.total = road; t.minutes = mins; t.avgSpeed = road / (mins * 60); t.dest = b.name; t.from = a.name;
+    if (Trip.ALL_HIGHWAY) {
+      t.maneuvers = [
+        { type: 'merge', road: 'Ramp to I-4 East', at: 0.5 * MI, shield: null },
+        { type: 'straight', road: 'I-4', at: 1.6 * MI, shield: 'I-4' },
+        { type: 'straight', road: 'I-4', at: road * 0.45, shield: 'I-4' },
+        { type: 'exit', road: 'Exit ' + (55 + Math.round(road / MI / 8)) + ': ' + b.name, at: road - 2.2 * MI, shield: null },
+        { type: 'arrive', road: b.name, at: road, shield: null },
+      ];
+    }
     return t;
   }
   /** which leg we are on: 'start' (leaving the driveway), 'highway', 'city' (mid-trip streets) or 'end' (final approach) */
   get phase() {
+    if (Trip.ALL_HIGHWAY) return 'highway';
     if (this.legs) {
       const i = this.legs.findIndex((l) => this.traveled < l.end);
       const k = i < 0 ? this.legs.length - 1 : i, leg = this.legs[k];

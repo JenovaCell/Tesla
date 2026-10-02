@@ -6,7 +6,7 @@ export const MPH = 0.44704;
 
 export const ENVS = {
   highway: {
-    name: 'highway', fwd: 4, onc: 0, laneW: 3.7, median: 0, limit: 75, dens: 0.014, vmean: 0.97,
+    name: 'highway', fwd: 4, onc: 0, laneW: 3.7, median: 0, limit: 75, dens: 0.003, vmean: 0.97, laneSpeeds: [98, 66], maxEgo: 80,
     curvy: 0.7, lights: false, parked: false, oncRate: 0,
     mix: [['sedan', 0.42], ['suv', 0.3], ['pickup', 0.1], ['semi', 0.1], ['box', 0.08]],
   },
@@ -144,7 +144,18 @@ export class World {
     if (!o.ego && !o.cross) this.vehicles.push(v);
     return v;
   }
-  _laneV0(lane, dir) {
+  _laneV0(lane, dir, type) {
+    const e = this.env;
+    if (e.laneSpeeds && dir === 1) {
+      // highway drivers: left lane runs ~100 mph, right lane ~65, trucks stay slow
+      const n = this.lanes.length, f = n > 1 ? lane / (n - 1) : 0.5;
+      let mph = e.laneSpeeds[0] + (e.laneSpeeds[1] - e.laneSpeeds[0]) * f + (this.rng() - 0.5) * 14;
+      if (type === 'semi' || type === 'box') mph = Math.min(mph, 62 + this.rng() * 8);
+      return clamp(mph, 55, 100) * MPH;
+    }
+    return this._laneV0b(lane, dir);
+  }
+  _laneV0b(lane, dir) {
     const e = this.env, base = e.limit * MPH * e.vmean;
     const bias = dir === 1 ? (e.fwd > 1 ? (1 - lane / (e.fwd - 1)) * 0.12 - 0.04 : 0) : 0;   // left lanes a bit quicker
     return base * (1 + bias) * (0.94 + this.rng() * 0.12);
@@ -156,14 +167,14 @@ export class World {
       if (li === this.ego.lane) s = this.ego.s + 34 + this.rng() * 18;
       while (s < this.ego.s + 300) {
         const type = this._pickType();
-        this._makeVehicle(type, { s, lane: li, v: this._laneV0(li, 1) * 0.95, v0: this._laneV0(li, 1) });
+        this._makeVehicle(type, { s, lane: li, ...(() => { const v0 = this._laneV0(li, 1, type); return { v: v0 * 0.95, v0 }; })() });
         s += (1 / e.dens) * (0.5 + this.rng() * 1.2) + CAR_SIZE[type].len;
       }
       // a few behind (only when we're already rolling)
       let sb = this.ego.v > 12 ? this.ego.s - 30 - this.rng() * 30 : -Infinity;
       while (sb > this.ego.s - 90) {
         const type = this._pickType();
-        this._makeVehicle(type, { s: sb, lane: li, v: this._laneV0(li, 1), v0: this._laneV0(li, 1) });
+        { const v0 = this._laneV0(li, 1, type); this._makeVehicle(type, { s: sb, lane: li, v: v0, v0 }); }
         sb -= (1 / e.dens) * (0.7 + this.rng()) + 10;
       }
     }
@@ -282,6 +293,7 @@ export class World {
     // ---- ego longitudinal ----
     const prof = this.profile === 'hurry' ? (this.env.name === 'highway' ? 1.07 : 1.1) : this.profile === 'chill' ? 0.92 : 1.0;
     let v0 = this.limit * MPH * prof;
+    if (this.env.maxEgo) v0 = Math.min(v0, this.env.maxEgo * MPH);
     // slow for curves
     const pa = this.path(ego.s).th, pb = this.path(ego.s + 40).th, kk = Math.abs(pb - pa) / 40;
     if (kk > 1e-4) v0 = Math.min(v0, Math.sqrt(2.3 / kk));
@@ -356,12 +368,16 @@ export class World {
       if (this.rng() > Math.min(0.9, e.dens * 0.6 * Math.max(6, ego.v))) continue;
       const sFar = ego.s + 310, sNear = ego.s - 95;
       const clear = (s) => !fwd.some((b) => b.lane === li && Math.abs(b.s - s) < b.len + 16 + b.v * 0.65);
-      const v0 = this._laneV0(li, 1);
-      if (clear(sFar)) this._makeVehicle(this._pickType(), { s: sFar, lane: li, v: Math.min(v0, ego.v + 8) * 0.95 + 1, v0 });
+      const t0 = this._pickType(), v0 = this._laneV0(li, 1, t0);
+      if (li <= 1 && ego.v > 12 && this.rng() < 0.3 && clear(sNear)) {
+        // fast car coming up from behind in the left lanes
+        const vf = Math.min(this._laneV0(li, 1, 'sedan') * 1.04, 100 * MPH);
+        this._makeVehicle('sedan', { s: sNear, lane: li, v: Math.min(vf, ego.v + 9), v0: vf });
+      } else if (clear(sFar)) this._makeVehicle(t0, { s: sFar, lane: li, v: Math.min(v0, ego.v + 8) * 0.95 + 1, v0 });
       else if (this.rng() < 0.25 && clear(sNear) && ego.v > 12) {
         // fast overtaker from behind
-        const t = this._pickType();
-        this._makeVehicle(t, { s: sNear, lane: li, v: Math.min(v0 * 1.12, ego.v + 8), v0: v0 * 1.12 });
+        const t = this._pickType(), vf = Math.min(this._laneV0(li, 1, t) * 1.05, 100 * MPH);
+        this._makeVehicle(t, { s: sNear, lane: li, v: Math.min(vf, ego.v + 8), v0: vf });
       }
     }
     for (let li = 0; li < this.oncLanes.length; li++) {
