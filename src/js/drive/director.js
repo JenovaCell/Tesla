@@ -4,6 +4,7 @@ import { vehicleSize } from './models3d.js';
 import { DriveScene } from './scene.js';
 import { DriveUI } from './hud.js';
 import { Trip } from './trip.js';
+import { placeById, pickDestination, planRoute } from './routes.js';
 import { store, model, paintHex, resolvedTheme, rangeMi } from '../state.js';
 import { player } from '../media.js';
 import { toast } from '../util.js';
@@ -13,6 +14,7 @@ import { Sound } from './sound.js';
 const LEGS = {
   start: { env: 'city', layout: 'full', driveway: true },
   highway: { env: 'highway', layout: 'split' },
+  city: { env: 'city', layout: 'full' },
   end: { env: 'city', layout: 'full' },
 };
 
@@ -79,9 +81,24 @@ export class Director {
     store.state._gear = 'P'; store.state._ap = false; store.state._speed = 0; store.state._target = 0;
     store.set({ _gear: 'P' });
     this.world.ego.v = 0;
-    this.seed = Math.floor(Math.random() * 100000);
-    this.trip = new Trip('long', this.seed);       // the next destination, previewed while parked
     this.session = { miles: 0, kwh: 0, sec: 0 };
+    this.prepareNext();
+  }
+  setStart(id) {
+    store.set({ place: id }); this.at = id; this.arrivedAt = false;
+    if (this.state === 'park') this.prepareNext();
+  }
+  /** choose where we go next; show an estimate right away and swap in the real route when it arrives */
+  prepareNext() {
+    if (this.destId && this.arrivedAt) { this.at = this.destId; store.set({ place: this.at }); }
+    this.arrivedAt = false;
+    this.seed = Math.floor(Math.random() * 100000);
+    const from = placeById(this.at || store.get('place') || 'winterhaven'); this.at = from.id;
+    const to = pickDestination(from.id);
+    this.destId = to.id;
+    const token = (this._prep = (this._prep || 0) + 1);
+    this.trip = Trip.estimate(from, to, this.seed);
+    planRoute(from.id, to.id).then((r) => { if (r && token === this._prep && this.state === 'park') this.trip = Trip.fromRoute(r); });
   }
   startFSD() {
     if (this.state !== 'park') return;
@@ -175,7 +192,7 @@ export class Director {
     const phase = this.trip.phase;
     if (phase !== this.leg && !ctl.stop && !this._transition) { this.nextLeg(phase); }
     // arrival: ease to a stop at the destination
-    if (phase === 'end' && !ctl.stop) {
+    if (!ctl.stop) {
       const rem = this.trip.remaining;
       if (rem < 260) ctl.stopGap = Math.max(1, rem - 7);
     }
@@ -190,7 +207,7 @@ export class Director {
     st._speed = w.ego.v / MPH; st._gear = 'D'; st._target = st._speed;
     // arrived or stopped?
     if (w.ego.v < 0.15 && (ctl.stop || ctl.stopGap != null)) {
-      if (this.arrivedT == null) { this.arrivedT = 0; if (!ctl.stop) toast('You have arrived'); this.sound.chime('arrive'); }
+      if (this.arrivedT == null) { this.arrivedT = 0; if (!ctl.stop) { toast('You have arrived'); this.arrivedAt = true; } this.sound.chime('arrive'); }
       this.arrivedT += dt;
       if (this.arrivedT > 2.2) { this.parkAfterStop = false; this.enterPark(); return; }
     }

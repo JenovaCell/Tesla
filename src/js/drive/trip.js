@@ -1,19 +1,20 @@
 // Fake-but-consistent trip data for the navigation panel: maneuver list, ETA, remaining distance.
 // All distances are in metres internally.
 
+import { haversine } from './routeparse.js';
+
 const MI = 1609.344;
 
 const HWY_ROADS = [
-  ['I-85 N', 'interstate'], ['SC-11/Walhalla', 'exit'], ['SC-11/Cherokee Foothills Scenic Hwy', 'exit'], ['S Highway 11', 'turn'],
-  ['Roy F. Jones Hwy', 'turn'], ['GA-316 E', 'highway'], ['I-85 N/Greenville', 'interstate'], ['US-29 N', 'highway'], ['Lake Hartwell Rd', 'turn'],
-  ['Exit 54 / Easley', 'exit'], ['Old Greenville Hwy', 'turn'], ['Keowee Vineyards Dr', 'turn'],
+  ['I-4 E', 'interstate'], ['Exit 55: US-27 N', 'exit'], ['US-27 N', 'highway'], ['Polk Pkwy', 'highway'], ['Exit 58: CR-532', 'exit'],
+  ['SR-429 N', 'highway'], ['I-4 E/Orlando', 'interstate'], ['Exit 64B: US-192 W', 'exit'], ['Osceola Pkwy', 'turn'], ['World Dr', 'turn'],
 ];
 const CITY_ROADS = [
-  'N Goldwater Blvd', 'E Mockingbird Ln', 'E Cheney Dr', 'N Scottsdale Rd', 'E Stetson Dr', 'W Olympic Blvd', 'E 5th Ave', 'Gilmerton Ave',
-  'Camelback Rd', 'N Hayden Rd', 'E Indian School Rd', 'S Mill Ave', 'W University Dr', 'Palm Canyon Dr',
+  'Cypress Gardens Blvd', 'Havendale Blvd', 'Lake Howard Dr', 'Pope Ave', 'Buckeye Loop Rd', 'Ronald Reagan Pkwy', 'Osceola Pkwy',
+  'Vineland Rd', 'Sand Lake Rd', 'Buena Vista Dr', 'Epcot Center Dr', 'Floridian Way', 'Avenue T NW', 'Lake Ruby Dr',
 ];
-const DESTS_HWY = ['The Cliffs at Keowee Vineyards', 'Greenville Downtown Supercharger', 'Lake Keowee Overlook', 'Asheville Outlets'];
-const DESTS_CITY = ['Barrio Queen', '2930 Gilmerton Ave', 'Whole Foods Market', 'Kierland Commons', 'Old Town Scottsdale'];
+const DESTS_HWY = ['Magic Kingdom', 'Epcot', 'Disney Springs'];
+const DESTS_CITY = ['Winter Haven', 'Disney Springs', 'Epcot', 'Magic Kingdom'];
 
 function rng(seed) {
   let a = seed | 0;
@@ -80,7 +81,7 @@ export class Trip {
     const r = this.r;
     const [road, kind] = HWY_ROADS[(i * 3 + Math.floor(r() * HWY_ROADS.length)) % HWY_ROADS.length];
     const type = kind === 'exit' ? (r() < 0.5 ? 'exit' : 'slightR') : kind === 'turn' ? (r() < 0.5 ? 'left' : 'right') : 'straight';
-    return { type, road, at, shield: kind === 'interstate' ? 'I-85' : null };
+    return { type, road, at, shield: kind === 'interstate' ? 'I-4' : null };
   }
   _shape() {
     // polyline in "map metres" with a gently winding highway or a grid-like city route
@@ -103,13 +104,44 @@ export class Trip {
     }
     return pts;
   }
-  /** which leg of a 'long' trip we are on */
-  get phase() { return this.base !== 'long' ? this.base : this.traveled < this.startDist ? 'start' : this.traveled < this.total - this.endDist ? 'highway' : 'end'; }
+  /** A trip built from a real route (see routes.js / routeparse.js). */
+  static fromRoute(r) {
+    const t = Object.create(Trip.prototype);
+    Object.assign(t, { base: 'long', traveled: 0, total: r.total, dest: r.name, from: r.from, minutes: r.duration / 60, avgSpeed: r.total / r.duration,
+      maneuvers: r.maneuvers, route: r.route, legs: r.legs, cumD: r.cumD, cumT: r.cumT, real: true, r: rng(7) });
+    return t;
+  }
+  /** estimated trip between two places when no route is available */
+  static estimate(a, b, seed) {
+    const t = new Trip('long', seed), T0 = t.total;
+    const road = Math.max(haversine([a.lat, a.lon], [b.lat, b.lon]) * 1.28, t.startDist + t.endDist + 5 * MI);
+    const mins = road / 21 / 60, k = (road - t.startDist - t.endDist) / (T0 - t.startDist - t.endDist);
+    for (const m of t.maneuvers) {
+      if (m.at > T0 - t.endDist - 0.5 * MI) m.at += road - T0; else if (m.at > t.startDist) m.at = t.startDist + (m.at - t.startDist) * k;
+    }
+    t.total = road; t.minutes = mins; t.avgSpeed = road / (mins * 60); t.dest = b.name; t.from = a.name;
+    return t;
+  }
+  /** which leg we are on: 'start' (leaving the driveway), 'highway', 'city' (mid-trip streets) or 'end' (final approach) */
+  get phase() {
+    if (this.legs) {
+      const i = this.legs.findIndex((l) => this.traveled < l.end);
+      const k = i < 0 ? this.legs.length - 1 : i, leg = this.legs[k];
+      return leg.kind === 'highway' ? 'highway' : k === 0 ? 'start' : k === this.legs.length - 1 ? 'end' : 'city';
+    }
+    return this.base !== 'long' ? this.base : this.traveled < this.startDist ? 'start' : this.traveled < this.total - this.endDist ? 'highway' : 'end';
+  }
   get kind() { return this.base === 'long' ? (this.phase === 'highway' ? 'highway' : 'city') : this.base; }
   advance(m) { this.traveled = Math.min(this.total, this.traveled + m); }
   get remaining() { return Math.max(0, this.total - this.traveled); }
   get progress() { return this.traveled / this.total; }
-  get etaSec() { return this.remaining / this.avgSpeed; }
+  get etaSec() {
+    if (!this.cumD) return this.remaining / this.avgSpeed;
+    const d = this.traveled, D = this.cumD, T = this.cumT;
+    let i = 1; while (i < D.length - 1 && D[i] < d) i++;
+    const f = D[i] > D[i - 1] ? (d - D[i - 1]) / (D[i] - D[i - 1]) : 1;
+    return Math.max(0, T[T.length - 1] - (T[i - 1] + (T[i] - T[i - 1]) * Math.min(1, f)));
+  }
   get nextIdx() { return Math.max(0, this.maneuvers.findIndex((m) => m.at > this.traveled + 1)); }
   get next() { const m = this.maneuvers[this.nextIdx]; return { ...m, dist: Math.max(0, m.at - this.traveled) }; }
   upcoming(n = 6) {

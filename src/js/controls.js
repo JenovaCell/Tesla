@@ -1,4 +1,5 @@
 // "Controls" app: left category list + settings panels (v14 style).
+import { PLACES } from './drive/routes.js';
 import { h, toast } from './util.js';
 import { icon } from './icons.js';
 import { store, model, setting, setSetting, tempStr, distUnit, mi2 } from './state.js';
@@ -140,6 +141,8 @@ const PANELS = {
           h('button', { class: i === store.get('wheel') ? 'active' : '', onclick: () => { store.set({ wheel: i }); rebuild(); } }, w))),
         h('div', { class: 'h2' }, 'Drive display'),
         tog('autoDemo', 'Auto-start the next drive after a pause (hands-free desk display)', false),
+        row('Starting location (next destinations are 30-45 min away)', h('select', { class: 'btn', onchange: (e) => window.drive?.setStart(e.target.value) },
+          PLACES.map((p) => h('option', { value: p.id, selected: p.id === (store.get('place') || 'winterhaven') }, p.name)))),
         seg('vizQuality', 'Graphics quality', [['low', 'Low'], ['balanced', 'Balanced'], ['high', 'High']], 'balanced'),
         row('Start / stop the drive now', act('Toggle', () => { const d = window.drive; if (!d) return; d.state === 'park' ? d.startFSD() : d.endTrip(); document.dispatchEvent(new CustomEvent('close-app')); })),
         row('Fullscreen (F11)', act('Toggle', () => window.host?.toggleFullscreen())),

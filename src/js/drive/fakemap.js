@@ -9,7 +9,7 @@ const PAL = {
   dark: { bg: '#1c1c20', minor: '#2b2b30', major: '#4b4b53', label: '#8a8b94', route: '#2e6bff', routeEdge: '#0d2a77', green: '#1c2520', water: '#182029', alt: '#c9b7bb', altText: '#2a2a2e', pin: '#e5484d' },
   light: { bg: '#e8e8ec', minor: '#fafafc', major: '#ffffff', label: '#6d6e76', route: '#2e6bff', routeEdge: '#1b49c0', green: '#d9e6d6', water: '#cbdbe8', alt: '#c9b7bb', altText: '#2a2a2e', pin: '#e5484d' },
 };
-const PLACES = ['Athens', 'Greenville', 'Lawrenceville', 'Suwanee', 'Nantahala National Forest', 'Clemson', 'Easley', 'Gainesville', 'Anderson', 'Buford'];
+const PLACES = ['Lakeland', 'Haines City', 'Davenport', 'Kissimmee', 'Celebration', 'Clermont', 'Winter Garden', 'Auburndale', 'Lake Wales', 'Poinciana', 'Lake Buena Vista', 'Ocoee', 'St. Cloud', 'Windermere'];
 
 export class FakeMap {
   constructor(canvas) {
