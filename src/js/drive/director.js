@@ -9,12 +9,12 @@ import { player } from '../media.js';
 import { toast } from '../util.js';
 import { Sound } from './sound.js';
 
-// The unattended loop: city (from rest) -> highway -> city until arrival -> parked -> repeat.
-const PLAN = [
-  { env: 'city', sec: 80, layout: 'full' },
-  { env: 'highway', sec: 160, layout: 'split' },
-  { env: 'city', sec: Infinity, layout: 'full' },      // ends on arrival
-];
+// One long drive per trip: driveway + neighbourhood streets -> highway -> city streets to the destination.
+const LEGS = {
+  start: { env: 'city', layout: 'full', driveway: true },
+  highway: { env: 'highway', layout: 'split' },
+  end: { env: 'city', layout: 'full' },
+};
 
 export class Director {
   constructor(root, deps) {
@@ -37,14 +37,14 @@ export class Director {
     this.seed = Math.floor(Math.random() * 1000);
     this.state = 'park';
     this.layout = 'split';
-    this.planIdx = 0;
+    this.leg = null;
     this.segT = 0;
     this.paused = false;
     this.parkT = 0;
-    this.autoDemo = true;
+    this.autoDemo = false;
     this.session = { miles: 0, kwh: 0, sec: 0 };
     this.world = new World('city', this.seed, { v: 0 });
-    this.trip = new Trip('city', this.seed);
+    this.trip = new Trip('long', this.seed);
     this.ctl = {};
     this.arrivedT = null;
     this.mapT = 0;
@@ -79,22 +79,25 @@ export class Director {
     store.state._gear = 'P'; store.state._ap = false; store.state._speed = 0; store.state._target = 0;
     store.set({ _gear: 'P' });
     this.world.ego.v = 0;
+    this.seed = Math.floor(Math.random() * 100000);
+    this.trip = new Trip('long', this.seed);       // the next destination, previewed while parked
+    this.session = { miles: 0, kwh: 0, sec: 0 };
   }
   startFSD() {
     if (this.state !== 'park') return;
     store.set({ doors: { fl: false, fr: false, rl: false, rr: false }, frunk: false, trunk: false, locked: false, charging: false, chargePort: false });
     store.state._ap = true;
     store.set({ _gear: 'D' });
-    this.planIdx = 0;
     this.sound.chime('engage');
-    this.beginSegment(PLAN[0], true, 0);
+    this.session = { miles: 0, kwh: 0, sec: 0 };
+    this.beginLeg('start', true, 0);
   }
-  beginSegment(seg, fromRest, v0) {
-    const seedN = this.seed + this.planIdx * 7 + Math.floor(performance.now() % 1000);
-    this.world = new World(seg.env, seedN, { v: fromRest ? 0 : v0, profile: 'standard' });
-    this.trip = new Trip(seg.env === 'city' ? 'city' : 'highway', seedN);
+  beginLeg(name, fromRest, v0) {
+    const seg = LEGS[name];
+    this.leg = name;
+    const seedN = this.seed + Math.floor(performance.now() % 1000) + (name === 'highway' ? 7 : name === 'end' ? 14 : 0);
+    this.world = new World(seg.env, seedN, { v: fromRest ? 0 : v0, profile: 'standard', driveway: !!seg.driveway });
     this.segT = 0; this.arrivedT = null; this.ctl = {};
-    this.session = this.session || { miles: 0, kwh: 0, sec: 0 };
     this.state = 'drive';
     this.scene.setMode('drive'); this.setLayout(seg.layout);
     this.scene.setTheme(this.theme);
@@ -107,14 +110,12 @@ export class Director {
   }
   setLayout(l) { this.layout = l; if (this.state === 'drive') this.ui.setMode(l); }
 
-  nextSegment() {
-    this.planIdx++;
-    if (this.planIdx >= PLAN.length) { this.planIdx = 0; this.enterPark(); return; }
-    const seg = PLAN[this.planIdx];
+  nextLeg(name) {
+    const seg = LEGS[name];
     this.ui.setFade(true);
     const v = this.world.ego.v;
-    setTimeout(() => { this.beginSegment(seg, false, Math.min(v, seg.env === 'highway' ? 28 : 12)); store.state._ap = true; }, 750);
-    this._transition = true; setTimeout(() => { this._transition = false; }, 800);
+    this._transition = true;
+    setTimeout(() => { this.beginLeg(name, false, Math.min(v, seg.env === 'highway' ? 28 : 12)); store.state._ap = true; this._transition = false; }, 750);
   }
 
   /* ---------------- main loop ---------------- */
@@ -161,20 +162,23 @@ export class Director {
     const fr = store.state.frunk, tr = store.state.trunk;
     const setLbl = (el, open, name) => { const k = (open ? 'Close' : 'Open') + name; if (el._k !== k) { el._k = k; el.firstChild.textContent = open ? 'Close' : 'Open'; } };
     setLbl(this.ui.calFrunk, fr, 'Frunk'); setLbl(this.ui.calTrunk, tr, 'Trunk');
-    this.autoDemo = store.state.s?.autoDemo ?? true;
-    if (this.autoDemo && this.parkT > (this.firstPark === false ? 9 : 7) ) { this.firstPark = false; this.startFSD(); }
+    // optional desk-display mode: start the next drive by itself after a pause
+    this.autoDemo = store.state.s?.autoDemo ?? false;
+    if (this.autoDemo && this.parkT > 25) this.startFSD();
   }
 
   driveStep(dt) {
-    const w = this.world, st = store.state, seg = PLAN[this.planIdx];
+    const w = this.world, st = store.state;
     this.segT += dt;
-    // arrival / stop handling
     const ctl = this.ctl;
-    if (seg.until !== 'time' && seg.sec === Infinity && !ctl.stop) {
+    // move on to the next leg of the trip by distance
+    const phase = this.trip.phase;
+    if (phase !== this.leg && !ctl.stop && !this._transition) { this.nextLeg(phase); }
+    // arrival: ease to a stop at the destination
+    if (phase === 'end' && !ctl.stop) {
       const rem = this.trip.remaining;
       if (rem < 260) ctl.stopGap = Math.max(1, rem - 7);
     }
-    if (seg.sec !== Infinity && this.segT > seg.sec && !ctl.stop && !this._transition) { this.nextSegment(); }
     w.update(dt, ctl);
     // events -> sound
     for (const ev of w.events.splice(0)) { if (ev.type === 'signal-on') this.sound.tickStart(); else if (ev.type === 'signal-off') this.sound.tickStop(); }
@@ -188,7 +192,7 @@ export class Director {
     if (w.ego.v < 0.15 && (ctl.stop || ctl.stopGap != null)) {
       if (this.arrivedT == null) { this.arrivedT = 0; if (!ctl.stop) toast('You have arrived'); this.sound.chime('arrive'); }
       this.arrivedT += dt;
-      if (this.arrivedT > 2.2) { this.parkAfterStop = false; this.planIdx = 0; this.firstPark = false; this.enterPark(); return; }
+      if (this.arrivedT > 2.2) { this.parkAfterStop = false; this.enterPark(); return; }
     }
     this.scene.renderDrive(w, dt);
   }

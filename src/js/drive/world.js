@@ -50,6 +50,15 @@ export class World {
     this.ego.v = opts.v ?? 0;
     this.limit = this.env.limit;
     this._populate();
+    if (opts.driveway) {
+      // start in a driveway beside the road, signal, and pull out into the right-hand lane
+      const last = this.lanes.length - 1;
+      this.vehicles = this.vehicles.filter((v) => !(v.parked || Math.abs(v.s) < 30 || (v.d > this.rightEdge && Math.abs(v.s) < 60)));
+      this.ego.d = this.rightEdge + 3.6; this.ego.lane = last;
+      this.ego.lc = { to: this.lanes[last].d, toLane: last, from: this.ego.d, t: 0, dur: 6.5, pre: 3.2 };
+      this.ego.signal = -1; this.ego.cooldown = 8; this._parkedUntil = 45;
+      this.events.push({ type: 'signal-on', dir: -1 });
+    }
     this.crossTimer = 0;
     this.spawnTimer = 0;
   }

@@ -66,6 +66,7 @@ export class DriveUI {
     this.miniCanvas = h('canvas');
     this.minimap = h('div', { class: 'minimap', onclick: () => d.setLayout('split') }, this.miniCanvas);
     this.mediaCard = h('div', { class: 'card2 media2' }); this.tripCard = h('div', { class: 'card2 trip2' });
+    this.mediaCardP = h('div', { class: 'card2 media2 media-park' }); this.tripCard2 = h('div', { class: 'card2 trip2 trip-nav' });
     const fullui = h('div', { class: 'fullui' },
       this.navChip,
       h('div', { class: 'topc' }, icon('lock', 20), icon('phone', 20)),
@@ -80,8 +81,7 @@ export class DriveUI {
     this.lockLine = h('div', { class: 'lockline' });
     this.startBtn = h('button', { class: 'startfsd', onclick: () => d.startFSD() }, 'Start Self-Driving');
     const parkui = h('div', { class: 'parkui' }, this.calFrunk, this.calTrunk, this.lockLine, this.lockPin, this.startBtn,
-      h('div', { class: 'park-hint' }, 'Drag to rotate'),
-      h('div', { class: 'assist' }, h('span', null, 'Ask…'), h('span', null, 'Assistant ⌄')));
+      h('div', { class: 'park-hint' }, 'Drag to rotate'), this.mediaCardP);
 
     this.layoutBtn = h('button', { class: 'iconbtn', style: { position: 'absolute', right: '12px', bottom: '84px', zIndex: 7, width: '40px', height: '40px', opacity: '.7' }, onclick: () => d.setLayout('full') }, icon('full', 20));
 
@@ -100,13 +100,9 @@ export class DriveUI {
     const top = h('div', { class: 'navp-top' }, icon('lock', 18), icon('phone', 18), h('span', { class: 'sp' }), this.timeTxt, this.tempTxt, h('span', { class: 'aqi' }, 'AQI 54'), h('span', { class: 'sp' }), h('span', { class: 'alertchip' }, 'PASSENGER\nAIRBAG OFF'));
     this.turnArrow = h('div', { class: 'ar' }); this.turnDist = h('div', { class: 'd' }); this.turnRoad = h('div', { class: 'r' }); this.turnShield = h('div');
     this.laneRow = h('div', { class: 'lanes' }); this.mlist = h('div', { class: 'mlist' });
-    this.etaA = h('b'); this.etaB = h('span'); this.etaC = h('span'); this.etaD = h('span'); this.etaProg = h('i');
-    const eta = h('div', { class: 'eta' },
-      h('div', { class: 't1' }, this.etaA, this.etaB),
-      h('div', { class: 't2' }, this.etaC, this.etaD), h('div', { class: 'prog' }, this.etaProg),
-      h('div', { class: 'btns' }, icon('nav', 22), h('b', { onclick: () => d.endTrip() }, 'End Trip'), h('span', null, '···')));
-    const turns = h('div', { class: 'turns' }, h('div', { class: 'turn-card' }, this.turnArrow, h('div', null, this.turnDist, this.turnRoad), this.turnShield), this.laneRow, this.mlist, eta);
-    this.nav = h('div', { class: 'navp' }, h('div', { class: 'mapc' }, this.mapCanvas), top, turns);
+    this.navChip2 = h('div', { class: 'navchip navchip2', onclick: () => this.nav.classList.toggle('open') });
+    const turns = h('div', { class: 'turns' }, h('div', { class: 'turn-card' }, this.turnArrow, h('div', null, this.turnDist, this.turnRoad), this.turnShield), this.laneRow, this.mlist);
+    this.nav = h('div', { class: 'navp' }, h('div', { class: 'mapc' }, this.mapCanvas), top, this.navChip2, turns, this.tripCard2);
 
     this.fade = h('div', { class: 'fade' });
     this.el.append(this.viz, this.nav, this.fade);
@@ -171,22 +167,20 @@ export class DriveUI {
       this.turnArrow.replaceChildren(arrow(nx.type, 48));
       this.turnRoad.textContent = nx.road;
       this.turnShield.replaceChildren(...(nx.shield ? [shieldSvg(nx.shield)] : []));
-      this.navChip.replaceChildren(arrow(nx.type, 28), h('div', null, h('span', { 'data-d': 1 }), h('small', null, nx.road)));
+      const chip = () => [arrow(nx.type, 34), h('div', { class: 'nc' }, h('div', { class: 'ncd' }, h('span', { 'data-d': 1 }), ...(nx.shield ? [h('i', { class: 'pill' }, nx.shield.replace('I-', ''))] : [])), h('div', { class: 'ncr' }, nx.road))];
+      this.navChip.replaceChildren(...chip()); this.navChip2.replaceChildren(...chip());
       const ln = nx.type === 'straight' || nx.type === 'exit' ? [0, 1, 1, 1] : [1, 0, 0, 0];
       this.laneRow.replaceChildren(...ln.map((v) => laneSvg(!!v)));
       this.mlist.replaceChildren(...trip.upcoming(6).map((m) => h('div', { class: 'mrow' }, arrow(m.type, 28), h('div', { class: 'n' }, m.road), h('div', { class: 'm', 'data-d': 1 }, fmtDist(m.dist, units)))));
     }
     this._set(this.turnDist, 'td', fmtDist(nx.dist, units));
-    const cd = this.navChip.querySelector('span[data-d]'); if (cd) cd.textContent = fmtDist(nx.dist, units);
+    for (const c of [this.navChip, this.navChip2]) { const cd = c.querySelector('span[data-d]'); if (cd) cd.textContent = fmtDist(nx.dist, units); }
     // eta
     const etaSec = trip.etaSec, arr = new Date(Date.now() + etaSec * 1000);
     const ah = arr.getHours(), am = String(arr.getMinutes()).padStart(2, '0');
     const astr = clock24 ? `${String(ah).padStart(2, '0')}:${am}` : `${((ah + 11) % 12) + 1}:${am} ${ah < 12 ? 'am' : 'pm'}`;
     const remMi = trip.remaining / 1609.344, remShown = kmh ? remMi * 1.609344 : remMi;
-    this._set(this.etaA, 'ea', astr); this._set(this.etaB, 'eb', `${fmtDur(etaSec)}   ${remShown < 10 ? remShown.toFixed(1) : Math.round(remShown)} ${du}`);
     const arrSoc = Math.max(1, Math.round(soc - (remMi / S.rangeMi) * 100));
-    this._set(this.etaC, 'ec', trip.dest); this._set(this.etaD, 'ed', `▭ ${arrSoc}%`);
-    this.etaProg.style.width = (trip.progress * 100).toFixed(1) + '%';
 
     // full-mode cards
     this.updateCards(S, astr, remShown, du, arrSoc, etaSec);
@@ -198,8 +192,8 @@ export class DriveUI {
     if (this.cache.media !== mk) {
       this.cache.media = mk;
       const dd = this.d;
-      this.mediaCard.replaceChildren(
-        h('div', { class: 'top' }, h('div', { class: 'art' }, icon('music', 22)), h('div', { class: 'ti' }, h('b', null, np ? np.title : 'Choose Media Source'), h('span', null, np ? np.source : '')) ),
+      for (const card of [this.mediaCard, this.mediaCardP]) card.replaceChildren(
+        h('div', { class: 'top' }, h('div', { class: 'art' }, icon('music', 26)), h('div', { class: 'ti' }, h('b', null, np ? np.title : 'Choose Media Source'), h('span', null, np ? np.source : '')) ),
         h('div', { class: 'ctl' },
           h('button', { onclick: () => dd.media('prev') }, icon('prev', 22)),
           h('button', { onclick: () => dd.media('toggle') }, icon(S.playing ? 'pause' : 'play', 22)),
@@ -207,17 +201,22 @@ export class DriveUI {
           h('button', { onclick: () => dd.openApp('music') }, icon('music', 22)),
           h('button', { onclick: () => dd.openApp('music') }, icon('search', 22))));
     }
-    const arrive = this.tripCard;
     const tk = `${S.trip.dest}`;
     if (this.cache.tripKey !== tk) {
-      this.cache.tripKey = tk; for (const k of ['ta', 'tb', 'tc', 'td2']) delete this.cache[k];
-      this.tripA = h('b'); this.tripB = h('span'); this.tripC = h('span'); this.tripD = h('span'); this.tripP = h('i');
-      arrive.replaceChildren(h('div', { class: 't1' }, this.tripA, this.tripB), h('div', { class: 't2' }, this.tripC, this.tripD), h('div', { class: 'prog' }, this.tripP),
-        h('div', { class: 'btns' }, icon('nav', 20), h('b', { onclick: () => this.d.endTrip() }, 'End Trip'), h('span', null, '···')));
+      this.cache.tripKey = tk; this.tripF = [];
+      for (const card of [this.tripCard, this.tripCard2]) {
+        const f = { a: h('b'), b: h('span'), c: h('span'), d: h('span'), p: h('i'), cache: {} };
+        card.replaceChildren(h('div', { class: 't1' }, f.a, f.b), h('div', { class: 't2' }, f.c, f.d), h('div', { class: 'prog' }, f.p),
+          h('div', { class: 'btns' }, icon('nav', 20), h('b', { onclick: () => this.d.endTrip() }, 'End Trip'), h('span', null, '···')));
+        this.tripF.push(f);
+      }
     }
-    this._set(this.tripA, 'ta', astr); this._set(this.tripB, 'tb', `${fmtDur(etaSec)}   ${remShown < 10 ? remShown.toFixed(1) : Math.round(remShown)} ${du}`);
-    this._set(this.tripC, 'tc', S.trip.dest); this._set(this.tripD, 'td2', `▭ ${arrSoc}%`);
-    this.tripP.style.width = (S.trip.progress * 100).toFixed(1) + '%';
+    const set = (f, k, v) => { if (f.cache[k] !== v) { f.cache[k] = v; f[k].textContent = v; } };
+    for (const f of this.tripF) {
+      set(f, 'a', astr); set(f, 'b', `${fmtDur(etaSec)}   ${remShown < 10 ? remShown.toFixed(1) : Math.round(remShown)} ${du}`);
+      set(f, 'c', S.trip.dest); set(f, 'd', `▭ ${arrSoc}%`);
+      f.p.style.width = (S.trip.progress * 100).toFixed(1) + '%';
+    }
   }
 
   /** map drawing (called each frame at a lower rate) */

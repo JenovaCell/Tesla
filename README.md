@@ -43,7 +43,7 @@ The home screen is a live 3D Self-Driving visualisation, modelled on the real sc
 * **Traffic** — NPC cars follow cars ahead, change lanes with turn signals, overtake; in the city the ego stops
   at red lights and crosswalks, with cross traffic, pedestrians and parked cars. The blue planned path bends
   into lane changes.
-* **Unattended loop** — city → highway → city until arrival → parked → repeat. Turn it off in
+* **One long drive per trip** — press **Start Self-Driving** and the car pulls out of a driveway, drives a 35–45 minute (≈45 mile) trip (neighbourhood → highway → city streets), stops at the destination and waits in park. Press the button again for a new random destination. Optional hands-free mode: *Controls → Simulator → Auto-start the next drive*.
   *Controls → Simulator → Auto-run Self-Driving demo*.
 * **Light / Dark / Auto** theme (moon/sun button on the dock). Graphics quality is under *Controls → Simulator*
   (Low / Balanced / High) if an older GPU struggles.

@@ -139,7 +139,7 @@ const PANELS = {
         h('div', { class: 'seg', style: { marginBottom: '26px', flexWrap: 'wrap' } }, m.wheels.map((w, i) =>
           h('button', { class: i === store.get('wheel') ? 'active' : '', onclick: () => { store.set({ wheel: i }); rebuild(); } }, w))),
         h('div', { class: 'h2' }, 'Drive display'),
-        tog('autoDemo', 'Auto-run Self-Driving demo (loops, for a desk display)', true),
+        tog('autoDemo', 'Auto-start the next drive after a pause (hands-free desk display)', false),
         seg('vizQuality', 'Graphics quality', [['low', 'Low'], ['balanced', 'Balanced'], ['high', 'High']], 'balanced'),
         row('Start / stop the drive now', act('Toggle', () => { const d = window.drive; if (!d) return; d.state === 'park' ? d.startFSD() : d.endTrip(); document.dispatchEvent(new CustomEvent('close-app')); })),
         row('Fullscreen (F11)', act('Toggle', () => window.host?.toggleFullscreen())),
