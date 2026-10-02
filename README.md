@@ -37,6 +37,9 @@ The home screen is a live 3D Self-Driving visualisation, modelled on the real sc
   upcoming maneuvers, ETA, *End Trip*, route map with time bubbles).
 * **Full layout (city)** — full-width visualisation with nav chip, mini-map, media card and trip card.
   Tap the mini-map for the split layout, or the corner button to go full.
+* **Your car** — the car being driven is drawn in the paint you pick and the model you pick: Model 3, Model Y,
+  Model S, Model X, or the faceted Cybertruck, with a glass roof, mirrors, light bars and glossy reflections.
+  Other traffic is matte grey, like the real display.
 * **Traffic** — NPC cars follow cars ahead, change lanes with turn signals, overtake; in the city the ego stops
   at red lights and crosswalks, with cross traffic, pedestrians and parked cars. The blue planned path bends
   into lane changes.

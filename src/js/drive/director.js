@@ -1,5 +1,6 @@
 // Orchestrates the drive display: parked view -> Self-Driving trips (city / highway) -> arrival -> loop.
-import { World, MPH, CAR_SIZE } from './world.js';
+import { World, MPH } from './world.js';
+import { vehicleSize } from './models3d.js';
 import { DriveScene } from './scene.js';
 import { DriveUI } from './hud.js';
 import { Trip } from './trip.js';
@@ -58,7 +59,7 @@ export class Director {
     this._raf = requestAnimationFrame((t) => this.frame(t));
   }
 
-  carType() { const b = model().body; return b === 'truck' ? 'pickup' : b === 'suv' ? 'suv' : 'sedan'; }
+  carType() { return store.get('model'); }
   paintInt() { return parseInt(paintHex().slice(1), 16); }
   stageScale() { const r = this.ui.viz.getBoundingClientRect(); return r.width / Math.max(1, this.ui.viz.offsetWidth) || 1; }
   setPaused(p) { this.paused = p; this.last = performance.now(); }
@@ -153,7 +154,7 @@ export class Director {
     this.scene.renderPark(dt, { drag: this.scene.dragAng });
     // project callouts
     const sc = this.scene;
-    const L = CAR_SIZE[this.scene.carType || 'sedan'].len;
+    const L = vehicleSize(this.scene.carType || 'model3').len;
     this.ui.placeCallouts({
       frunk: sc.projectParked(0.0, 0.95, -L / 2 + 0.3), trunk: sc.projectParked(0.0, 1.0, L / 2 - 0.2), top: sc.projectParked(0, 1.55, 0),
     });

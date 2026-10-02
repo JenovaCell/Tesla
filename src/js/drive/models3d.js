@@ -8,6 +8,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CAR_SIZE } from './world.js';
 
+// The car being driven: one detailed model per selectable vehicle (metres).
+const EGO_SIZE = {
+  model3: { len: 4.72, wid: 1.93 }, modely: { len: 4.8, wid: 1.98 }, models: { len: 5.02, wid: 1.99 },
+  modelx: { len: 5.04, wid: 2.0 }, cybertruck: { len: 5.68, wid: 2.03 },
+};
+export const vehicleSize = (t) => CAR_SIZE[t] || EGO_SIZE[t];
+const isEgoModel = (t) => !!EGO_SIZE[t];
+
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
@@ -47,50 +55,95 @@ const SPEC = {
   },
 };
 
+SPEC.model3 = { ...SPEC.sedan, wheelR: 0.35, bar: 0.78 };
+SPEC.modely = {
+  belt: [[0, 0.9], [0.1, 1.02], [0.7, 1.07], [1.7, 1.08], [3.4, 1.04], [4.0, 0.95], [4.5, 0.8], [4.8, 0.6]],
+  roof: [[0, 0], [0.35, 1.07], [0.7, 1.3], [1.2, 1.52], [1.8, 1.62], [2.5, 1.64], [3.0, 1.58], [3.4, 1.38], [3.8, 1.05], [4.8, 0]],
+  cabW: 0.82, wheelR: 0.37, bar: 0.82,
+};
+SPEC.models = {
+  belt: [[0, 0.86], [0.1, 0.98], [0.8, 1.0], [1.9, 1.0], [3.6, 0.96], [4.2, 0.86], [4.7, 0.72], [5.02, 0.52]],
+  roof: [[0, 0], [0.45, 1.0], [0.9, 1.2], [1.5, 1.36], [2.2, 1.43], [2.8, 1.44], [3.2, 1.36], [3.6, 1.14], [3.95, 0.96], [5.02, 0]],
+  cabW: 0.8, wheelR: 0.37, bar: 0.8,
+};
+SPEC.modelx = {
+  belt: [[0, 0.92], [0.1, 1.04], [0.7, 1.1], [2.0, 1.1], [3.7, 1.05], [4.3, 0.95], [4.75, 0.8], [5.04, 0.6]],
+  roof: [[0, 0], [0.3, 1.1], [0.6, 1.45], [1.3, 1.64], [2.5, 1.68], [3.2, 1.6], [3.7, 1.3], [4.1, 1.06], [5.04, 0]],
+  cabW: 0.84, wheelR: 0.39, bar: 0.82,
+};
+// Cybertruck: flat-shaded stainless wedge (facets, sharp edges)
+SPEC.cybertruck = {
+  belt: [[0, 1.2], [1.0, 1.22], [1.9, 1.2], [3.9, 1.12], [5.2, 0.9], [5.68, 0.72]],
+  roof: [[0, 0], [1.5, 1.22], [1.95, 1.79], [3.0, 1.8], [4.2, 1.2], [4.4, 1.1], [5.68, 0]],
+  cabW: 0.88, wheelR: 0.43, bar: 0.9, facet: true,
+};
+
 const NST = 56, KH = 22;
 const bodyHalfWidth = (x, L, hw0) => Math.max(0.01, hw0 * Math.pow(Math.max(0, 1 - Math.pow(Math.abs((2 * x) / L - 1), 10)), 0.3) * (1 - 0.1 * sstep(0.55, 1, x / L)));       // stations along the car, points per half cross-section
 
 function buildBodyGeometry(type) {
-  const { len: L, wid: W } = CAR_SIZE[type], sp = SPEC[type], hw0 = W / 2;
+  const { len: L, wid: W } = vehicleSize(type), sp = SPEC[type], hw0 = W / 2;
+  const facet = !!sp.facet;
   const pos = [], info = [], rings = [];
   let cabRange = [Infinity, -Infinity];
-  for (let i = 0; i <= NST; i++) {
-    const x = ((1 - Math.cos((Math.PI * i) / NST)) / 2) * L;
+  // stations: smooth cars use cosine spacing; faceted bodies put a ring exactly on each profile breakpoint
+  let xs = [];
+  if (facet) {
+    const set = new Set([0, L]);
+    for (const [x] of sp.belt) set.add(x);
+    for (const [x, y] of sp.roof) if (y > 0 && x > 0 && x < L) set.add(x);
+    xs = [...set].sort((a, b) => a - b);
+  } else for (let i = 0; i <= NST; i++) xs.push(((1 - Math.cos((Math.PI * i) / NST)) / 2) * L);
+  const nS = xs.length - 1;
+  for (let i = 0; i <= nS; i++) {
+    const x = xs[i];
     const u = (2 * x) / L - 1;
-    const belt = prof(sp.belt, x, 0.35);
-    const roof = prof(sp.roof, x, 0.3);
-    const top = Math.max(roof, belt + 0.05);
+    const belt = facet ? lerpPts(sp.belt, x) : prof(sp.belt, x, 0.35);
+    const roof = facet ? lerpPts(sp.roof, x) : prof(sp.roof, x, 0.3);
+    const top = Math.max(roof, belt + (facet ? 0.02 : 0.05));
     const cab = roof - belt;
     if (cab > 0.12) { cabRange[0] = Math.min(cabRange[0], x); cabRange[1] = Math.max(cabRange[1], x); }
-    const w = bodyHalfWidth(x, L, hw0);
-    const y0 = 0.2 + 0.22 * Math.pow(Math.abs(u), 4);
+    const w = facet ? hw0 * (1 - 0.2 * sstep(0.78, 1, x / L)) : bodyHalfWidth(x, L, hw0);
+    const y0 = facet ? 0.28 : 0.2 + 0.22 * Math.pow(Math.abs(u), 4);
     const cw = sp.cabW, cabin = top - belt;
-    const ctl = [
-      [0, y0], [w * 0.78, y0 + 0.015], [w * 0.96, y0 + 0.12], [w, (y0 + belt) * 0.5], [w * 0.985, belt - 0.07],
-      [w * 0.93, belt + 0.015], [w * cw, belt + cabin * 0.14], [w * cw * 0.92, belt + cabin * 0.6], [w * cw * 0.8, top - 0.05], [w * cw * 0.46, top - 0.008], [0, top],
-    ].map((p) => new THREE.Vector2(p[0], p[1]));
-    const half = new THREE.SplineCurve(ctl).getSpacedPoints(KH);
+    let half;
+    if (facet) {
+      half = [[0, y0], [w * 0.9, y0], [w, y0 + 0.14], [w, belt - 0.03], [w * 0.97, belt], [w * cw, belt + 0.02], [w * cw * 0.72, top], [0, top]].map((p) => new THREE.Vector2(p[0], p[1]));
+    } else {
+      const ctl = [
+        [0, y0], [w * 0.78, y0 + 0.015], [w * 0.96, y0 + 0.12], [w, (y0 + belt) * 0.5], [w * 0.985, belt - 0.07],
+        [w * 0.93, belt + 0.015], [w * cw, belt + cabin * 0.14], [w * cw * 0.92, belt + cabin * 0.6], [w * cw * 0.8, top - 0.05], [w * cw * 0.46, top - 0.008], [0, top],
+      ].map((p) => new THREE.Vector2(p[0], p[1]));
+      half = new THREE.SplineCurve(ctl).getSpacedPoints(KH);
+    }
     const ring = [];
     const pushPt = (px, py) => { pos.push(px, py, L / 2 - x); info.push({ x, belt, cab, y0 }); ring.push(info.length - 1); };
-    for (let k = 0; k <= KH; k++) pushPt(Math.max(0, half[k].x), half[k].y);
-    for (let k = KH - 1; k >= 1; k--) pushPt(-Math.max(0, half[k].x), half[k].y);
+    const n = half.length - 1;
+    for (let k = 0; k <= n; k++) pushPt(Math.max(0, half[k].x), half[k].y);
+    for (let k = n - 1; k >= 1; k--) pushPt(-Math.max(0, half[k].x), half[k].y);
     rings.push(ring);
   }
   const K = rings[0].length, idx = [];
-  for (let i = 0; i < NST; i++) for (let k = 0; k < K; k++) {
+  for (let i = 0; i < nS; i++) for (let k = 0; k < K; k++) {
     const a = rings[i][k], b = rings[i][(k + 1) % K], c = rings[i + 1][k], d = rings[i + 1][(k + 1) % K];
     idx.push(a, c, b, b, c, d);
   }
-  for (const [ring, flip] of [[rings[0], false], [rings[NST], true]]) {
+  for (const [ring, flip] of [[rings[0], false], [rings[nS], true]]) {
     let cx = 0, cy = 0, cz = 0; for (const vi of ring) { cx += pos[vi * 3]; cy += pos[vi * 3 + 1]; cz += pos[vi * 3 + 2]; }
     pos.push(cx / K, cy / K, cz / K); info.push(info[ring[0]]); const ci = info.length - 1;
     for (let k = 0; k < K; k++) flip ? idx.push(ci, ring[(k + 1) % K], ring[k]) : idx.push(ci, ring[k], ring[(k + 1) % K]);
   }
-  const g = new THREE.BufferGeometry();
+  let g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx);
+  let outInfo = info;
+  if (facet) {                       // flat shading: unshare vertices, keep the per-vertex info in step
+    const ia = g.index.array;
+    g = g.toNonIndexed();
+    outInfo = Array.from(ia, (i) => info[i]);
+  }
   g.computeVertexNormals();
-  g.userData = { info, cabRange };
+  g.userData = { info: outInfo, cabRange };
   return g;
 }
 
@@ -142,7 +195,7 @@ function boxPart(w, h, d, y, z, glassFn, radius = 0.16) {
   return g;
 }
 function buildBoxVehicle(type) {
-  const { len: L, wid: W } = CAR_SIZE[type];
+  const { len: L, wid: W } = vehicleSize(type);
   const parts = [];
   if (type === 'semi') {
     parts.push(boxPart(W - 0.1, 3.0, 2.8, 0.8, -L / 2 + 1.4, (x, y, z, nx, ny, nz) => (nz < -0.5 && y > 2.0 && y < 3.4 ? 1 : 0), 0.3));
@@ -158,7 +211,7 @@ function buildBoxVehicle(type) {
 const wheelCache = new Map();
 function wheelGeometry(type) {
   if (wheelCache.has(type)) return wheelCache.get(type);
-  const { len: L, wid: W } = CAR_SIZE[type];
+  const { len: L, wid: W } = vehicleSize(type);
   const r = type === 'semi' || type === 'box' ? 0.5 : SPEC[type].wheelR;
   const axles = type === 'semi' ? [-L / 2 + 1.5, L / 2 - 4.2, L / 2 - 1.9] : type === 'box' ? [-L / 2 + 1.3, L / 2 - 1.5] : [-L / 2 + 0.98, L / 2 - 0.98];
   const pieces = [];
@@ -169,7 +222,7 @@ function wheelGeometry(type) {
     g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g;
   };
   for (const z of axles) for (const sx of [-1, 1]) {
-    const bw = type === 'semi' || type === 'box' ? (W / 2) * 0.9 : bodyHalfWidth(L / 2 - z, L, W / 2) - 0.1;
+    const bw = type === 'semi' || type === 'box' ? (W / 2) * 0.9 : SPEC[type].facet ? (W / 2) * 0.97 - 0.1 : bodyHalfWidth(L / 2 - z, L, W / 2) - 0.1;
     const tire = new THREE.CylinderGeometry(r, r, 0.25, 16).rotateZ(Math.PI / 2).translate(sx * bw, r, z);
     const rim = new THREE.CylinderGeometry(r * 0.66, r * 0.66, 0.27, 12).rotateZ(Math.PI / 2).translate(sx * (bw + 0.004), r, z);
     const arch = new THREE.CylinderGeometry(r * 1.2, r * 1.2, 0.02, 16).rotateZ(Math.PI / 2).translate(sx * (bw + 0.1), r + 0.04, z);
@@ -201,13 +254,13 @@ const barGeo = new THREE.BoxGeometry(1, 0.075, 0.05);
 const blinkGeo = new THREE.BoxGeometry(0.26, 0.12, 0.05);
 const bodyCache = new Map();
 function bodyGeo(type, variant) {
-  const key = `${type}|${variant}`;
+  const key = `${type}|${variant === 'ego' ? 'hero' : variant}`;
   if (bodyCache.has(key)) return bodyCache.get(key);
   let g;
   if (type === 'semi' || type === 'box') g = buildBoxVehicle(type);
-  else g = bakeBody(buildBodyGeometry(type), variant === 'hero'
-    ? { lit: false, glassTone: 0.07, glassRoof: true }
-    : { lit: true, glassTone: variant === 'ego' ? 0.62 : 0.6, glassRoof: variant === 'ego' });
+  else g = bakeBody(buildBodyGeometry(type), variant === 'hero' || variant === 'ego'
+    ? { lit: false, glassTone: 0.06, glassRoof: type !== 'cybertruck' }
+    : { lit: true, glassTone: 0.6, glassRoof: false });
   bodyCache.set(key, g);
   return g;
 }
@@ -218,43 +271,49 @@ function bodyGeo(type, variant) {
  *  hero = glossy standard material with reflections (parked showcase)
  */
 export function buildVehicle(type, opts = {}) {
-  const { len: L, wid: W } = CAR_SIZE[type];
+  const { len: L, wid: W } = vehicleSize(type);
   const variant = opts.variant || 'npc';
+  const glossy = variant === 'hero' || variant === 'ego';
+  const sp = SPEC[type];
   const g = new THREE.Group();
   const geo = bodyGeo(type, variant);
   const opacity = opts.opacity ?? 1;
-  const bodyMat = variant === 'hero'
-    ? new THREE.MeshStandardMaterial({ vertexColors: true, color: opts.tint ?? 0xcfcfd6, roughness: 0.3, metalness: 0.55, envMap: opts.envMap || null, envMapIntensity: 0.6 })
+  const bodyMat = glossy
+    ? new THREE.MeshStandardMaterial({ vertexColors: true, color: opts.tint ?? 0xcfcfd6, roughness: type === 'cybertruck' ? 0.42 : 0.28, metalness: type === 'cybertruck' ? 0.6 : 0.55, envMap: opts.envMap || null, envMapIntensity: type === 'cybertruck' ? 0.55 : 0.5, flatShading: !!sp?.facet, transparent: !!opts.transparent })
     : new THREE.MeshBasicMaterial({ vertexColors: true, color: opts.tint ?? 0xcfcfd6, transparent: opacity < 1 || !!opts.transparent, opacity });
   g.add(new THREE.Mesh(geo, bodyMat));
   const wheelMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff, transparent: !!opts.transparent });
   g.add(new THREE.Mesh(wheelGeometry(type), wheelMat));
 
-  // tail bar + signals (rear = +Z) and nose lights (-Z)
+  // tail light bar + signals (rear = +Z) and nose lights (-Z)
   const tailMat = new THREE.MeshBasicMaterial({ color: 0x701010 });
   const tail = new THREE.Mesh(barGeo, tailMat);
-  tail.scale.x = W * 0.58;
-  const ty = type === 'semi' || type === 'box' ? 1.0 : type === 'pickup' || type === 'van' ? 1.02 : 0.9;
-  tail.position.set(0, ty, L / 2 - 0.1);
+  tail.scale.x = W * (sp?.bar ?? 0.58);
+  const ty = glossy && sp ? Math.max(0.78, lerpPts(sp.belt, 0.12) - 0.1) : type === 'semi' || type === 'box' ? 1.0 : type === 'pickup' || type === 'van' ? 1.02 : 0.9;
+  tail.position.set(0, ty, L / 2 - (sp?.facet ? 0.02 : 0.1));
   g.add(tail);
   const bm = () => new THREE.MeshBasicMaterial({ color: 0xff9a1a, transparent: true, opacity: 0 });
   const blinkL = new THREE.Mesh(blinkGeo, bm()), blinkR = new THREE.Mesh(blinkGeo, bm());
-  blinkL.position.set(-W * 0.38, ty - 0.02, L / 2 - 0.1); blinkR.position.set(W * 0.38, ty - 0.02, L / 2 - 0.1);
+  blinkL.position.set(-W * 0.38, ty - 0.1, L / 2 - 0.1); blinkR.position.set(W * 0.38, ty - 0.1, L / 2 - 0.1);
   g.add(blinkL, blinkR);
-  if (type !== 'semi' && type !== 'box' && variant !== 'hero') {
-    const hl = new THREE.Mesh(barGeo, new THREE.MeshBasicMaterial({ color: 0xdfe6f5, transparent: true, opacity: variant === 'hero' ? 0.95 : 0.4 }));
+  if (type !== 'semi' && type !== 'box' && !glossy) {
+    const hl = new THREE.Mesh(barGeo, new THREE.MeshBasicMaterial({ color: 0xdfe6f5, transparent: true, opacity: 0.4 }));
     hl.scale.x = W * 0.5; hl.position.set(0, type === 'sedan' ? 0.7 : 0.78, -L / 2 + 0.1); g.add(hl);
+  }
+  if (glossy && sp) {            // slim LED headlight bar across the nose + mirrors
+    const nz = lerpPts(sp.belt, L - 0.05);
+    const hl = new THREE.Mesh(barGeo, new THREE.MeshBasicMaterial({ color: 0xeaf0ff }));
+    hl.scale.x = W * (type === 'cybertruck' ? 0.9 : 0.62); hl.position.set(0, Math.max(0.62, nz - 0.04), -L / 2 + (sp.facet ? 0.02 : 0.09)); g.add(hl);
+    const mirrorY = (lerpPts(sp.belt, L * 0.68) + 0.0), mirrorZ = -L / 2 + L * 0.31;
+    for (const sx of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.22), new THREE.MeshStandardMaterial({ color: opts.tint ?? 0xcfcfd6, roughness: 0.3, metalness: 0.5, envMap: opts.envMap || null, envMapIntensity: 0.6, transparent: !!opts.transparent }));
+      m.position.set(sx * (W / 2 + 0.02), mirrorY + 0.03, mirrorZ); g.add(m);
+    }
   }
   // brake glow on the road behind; headlight halo on the road ahead (ego)
   const brakeGlow = glowPlane('255,40,30', W * 2.2, 5.5); brakeGlow.position.set(0, 0.04, L / 2 + 2.0); g.add(brakeGlow);
   let headGlow = null;
   if (variant === 'ego') { headGlow = glowPlane('255,255,255', W * 2.6, 9); headGlow.position.set(0, 0.04, -L / 2 - 3.2); headGlow.material.opacity = 0.55; g.add(headGlow); }
-  if (variant === 'hero') {
-    for (const sx of [-1, 1]) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.2), new THREE.MeshStandardMaterial({ color: opts.tint ?? 0xcfcfd6, roughness: 0.35, metalness: 0.5, envMap: opts.envMap || null, envMapIntensity: 0.6 }));
-      m.position.set(sx * (W / 2 - 0.1), 0.98, -L / 2 + 1.55); g.add(m);
-    }
-  }
   g.userData = { tail, tailMat, blinkL, blinkR, bodyMat, brakeGlow, headGlow, type };
   return g;
 }
@@ -262,9 +321,15 @@ export function buildVehicle(type, opts = {}) {
 export function buildPedestrian(color = 0xb9bcc4) {
   const g = new THREE.Group();
   const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.85, 3, 8), m); body.position.y = 0.95;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), m); head.position.y = 1.72;
-  g.add(body, head);
+  const dark = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.72), transparent: true, opacity: 0.95 });
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.5, 3, 8), m); torso.position.y = 1.2;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), m); head.position.y = 1.78;
+  const legs = [-1, 1].map((sx) => {
+    const pivot = new THREE.Group(); pivot.position.set(sx * 0.1, 0.88, 0);
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.62, 2, 6), dark); leg.position.y = -0.4; pivot.add(leg); g.add(pivot); return pivot;
+  });
+  g.add(torso, head);
+  g.userData.legs = legs;
   return g;
 }
 

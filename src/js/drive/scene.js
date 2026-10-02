@@ -123,7 +123,7 @@ export class DriveScene {
 
     // ego
     this.egoMesh = null;
-    this.setPaint(this.paint, opts.type || 'sedan');
+    this.setPaint(this.paint, opts.type || 'model3');
 
     // soft shadow disc (parked view)
     const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -165,18 +165,18 @@ export class DriveScene {
     this.egoMesh.visible = m === 'drive'; this.heroMesh.visible = m === 'park';
     this._applyBackground();
   }
-  setPaint(hex, type = 'sedan') {
+  setPaint(hex, type = 'model3') {
     this.paint = hex; this.carType = type;
     if (this.egoMesh) this.scene.remove(this.egoMesh);
     if (this.heroMesh) this.scene.remove(this.heroMesh);
-    // the ego is drawn dark in the driving view (tinted by the paint), like the real visualisation
-    const dark = new THREE.Color(hex).multiplyScalar(0.22).add(new THREE.Color(0x2c2d32));
-    this.egoMesh = buildVehicle(type, { variant: 'ego', tint: dark.getHex(), transparent: true });
+    // The car being driven is drawn in its real paint and model, glossy, like the real display.
+    this.egoMesh = buildVehicle(type, { variant: 'ego', tint: hex, envMap: this.envTex, transparent: true });
     this.egoMesh.renderOrder = 11;
-    // inverted-hull outline so the ego reads against the dark road (like the real visualisation)
-    const hullMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.5, depthWrite: false });
+    this.egoMesh.userData.bodyMat.emissive = new THREE.Color(hex).multiplyScalar(0.27);   // keep the paint lively on dark roads
+    // faint inverted-hull rim so very dark paints still read against the dark road
+    const hullMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.22, depthWrite: false });
     const body = this.egoMesh.children[0]; body.renderOrder = 3;
-    const hull = new THREE.Mesh(body.geometry, hullMat); hull.renderOrder = 2; hull.scale.set(1.045, 1.07, 1.014); hull.position.y = -0.02; this.egoMesh.add(hull);
+    const hull = new THREE.Mesh(body.geometry, hullMat); hull.renderOrder = 2; hull.scale.set(1.035, 1.05, 1.01); hull.position.y = -0.015; this.egoMesh.add(hull);
     this.egoHull = hullMat;
     this.heroMesh = buildVehicle(type, { variant: 'hero', tint: hex, envMap: this.envTex });
     this.heroMesh.visible = false;
@@ -249,7 +249,7 @@ export class DriveScene {
     // framing: portrait panel (split layout) vs wide (full layout)
     const aspect = this.w / Math.max(1, this.h);
     const wide = clamp01((aspect - 0.75) / 1.0);
-    const fov = 36 + wide * 12, camH = 13.5 - wide * 3, camZ = 34 - wide * 10, look = -12 + wide * 2;
+    const fov = 36 + wide * 12, camH = 13.5 - wide * 4.5, camZ = 34 - wide * 14, look = -12 + wide * 1;
     if (Math.abs(this.cam.fov - fov) > 0.01) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
     this.cam.position.set(this.camX, camH, camZ);
     this.cam.lookAt(this.lookX, 0.0, look);
@@ -366,6 +366,7 @@ export class DriveScene {
     u.tailMat.color.setRGB(0.45 + br * 0.55, 0.06, 0.06);
     u.brakeGlow.material.opacity = br * 0.65;
     if (u.headGlow) u.headGlow.material.opacity = this.theme === 'dark' ? 0.5 : 0.18;
+    if (this.egoHull) this.egoHull.opacity = this.theme === 'dark' ? 0.24 : 0;
 
     // ---- other vehicles ----
     const all = world.vehicles.concat(world.getCross());
@@ -400,6 +401,8 @@ export class DriveScene {
     for (const p of world.peds) {
       const m = this._getPed(p); const q = at(p.s, p.d);
       m.visible = true; m.position.set(q[0], Math.abs(Math.sin(p.phase)) * 0.04, q[1]);
+      m.rotation.y = -(world.path(p.s).th - thC + (p.vd > 0 ? Math.PI / 2 : -Math.PI / 2));
+      const lg = m.userData.legs; if (lg) { lg[0].rotation.x = Math.sin(p.phase) * 0.6; lg[1].rotation.x = -Math.sin(p.phase) * 0.6; }
     }
     for (const [id, e] of this.pedMeshes) if (e.seen !== this.frame) { this.scene.remove(e.mesh); this.pedMeshes.delete(id); }
 
