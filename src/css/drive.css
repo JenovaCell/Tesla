@@ -1,6 +1,6 @@
 /* ============ Drive display (FSD visualisation + navigation panel) ============ */
 .drive { position: absolute; inset: 0 0 var(--dock-h, 88px) 0; display: flex; overflow: hidden; font-family: var(--font); }
-:root { --dock-h: 88px; --blue: #3e8bff; --hud-card: rgba(32,32,36,.82); --hud-text: #f2f3f5; --hud-dim: #8d8f99; --viz-bg: #0a0a0d; --nav-bg: #131316; }
+:root { --dock-h: 84px; --blue: #3e8bff; --hud-card: rgba(32,32,36,.82); --hud-text: #f2f3f5; --hud-dim: #8d8f99; --viz-bg: #0a0a0d; --nav-bg: #131316; }
 :root[data-theme="light"] { --hud-card: rgba(255,255,255,.88); --hud-text: #17181c; --hud-dim: #6c6e78; --viz-bg: #dcdce1; --nav-bg: #ececef; --blue: #2f6bff; }
 
 .drive .viz { position: relative; width: 36%; flex: none; background: var(--viz-bg); overflow: hidden; transition: width .6s cubic-bezier(.3,.7,.2,1); color: var(--hud-text); }
@@ -131,14 +131,29 @@
 .drive .fade { position: absolute; inset: 0; background: #000; z-index: 20; opacity: 0; pointer-events: none; transition: opacity .7s; }
 .drive .fade.on { opacity: 1; }
 
-/* dock tweaks for the drive layout */
-.dock { height: var(--dock-h); padding: 0 14px; }
-.dockbtn { width: 64px; height: 64px; border-radius: 18px; }
-.dockbtn svg { width: 30px; height: 30px; }
-.temp .val { font-size: 30px; width: 76px; }
-.temp { min-width: 150px; }
-.temp .seat { width: 42px; height: 46px; } .temp .step { width: 34px; height: 46px; }
-.dock .center { gap: 8px; }
+/* dock: flat glyphs, small dim chevrons around the temperature, as on the real bar */
+.dock { height: var(--dock-h); padding: 0 22px; gap: 0; display: flex; align-items: center; }
+.dock .dgrp { display: flex; align-items: center; flex: 1 1 0; min-width: 0; }
+.dock .dgrp.r { justify-content: flex-end; }
+.dock .dgrp.l { gap: 40px; }
+.dock .center { flex: 0 0 auto; display: flex; justify-content: center; align-items: center; gap: 4px; }
+.dockbtn { width: 62px; height: 62px; border-radius: 16px; display: grid; place-items: center; position: relative; background: none; box-shadow: none !important; }
+.dockbtn svg { width: auto; height: auto; }
+.dockbtn.flat .dg, .dockbtn.flat .dg svg { display: block; }
+.dockbtn.flat:active { background: rgba(128,128,140,.2); transform: none; }
+.dockbtn.carbtn { color: #c7cad1; }
+:root[data-theme="light"] .dockbtn.carbtn { color: #55585f; }
+.dockbtn.active::after, .dockbtn.carbtn.active::after { content: ""; position: absolute; bottom: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--blue); }
+.dockbtn.small { width: 46px; height: 46px; color: var(--hud-dim); }
+.dock .sep { width: 1px; height: 22px; background: rgba(128,128,140,.45); margin: 0 10px; }
+.temp { display: flex; align-items: center; gap: 0; min-width: 0; }
+.temp .val { display: flex; flex-direction: column; align-items: center; width: 92px; line-height: 1; cursor: pointer; }
+.temp .val small { font-size: 12px; font-weight: 600; color: var(--hud-text); opacity: .85; letter-spacing: .2px; }
+.temp .val b { font-size: 40px; font-weight: 400; letter-spacing: -1px; margin-top: 1px; }
+.temp .step, .volrow .step { width: 30px; height: 54px; display: grid; place-items: center; color: var(--hud-dim); border-radius: 10px; opacity: .8; }
+.temp .seat { width: 54px; height: 54px; display: grid; place-items: center; color: var(--hud-text); border-radius: 12px; }
+.volrow { display: flex; align-items: center; margin-left: 14px; margin-right: 6px; }
+.dock .dgrp.r { gap: 0; }
 .overlay.sheet { top: 0; bottom: var(--dock-h); }
 
 .dock { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; }

@@ -10,13 +10,14 @@ export function tempControl(side) {
   const render = () => {
     const c = store.get('climate'), seatKey = side === 'L' ? 'seatL' : 'seatR', lv = c[seatKey];
     const step = (d) => () => setC({ [side]: Math.min(82, Math.max(60, c[side] + (store.get('tempUnit') === 'C' ? d * 1.8 : d))), on: true });
-    const seat = h('button', { class: 'seat', onclick: () => setC({ [seatKey]: (lv + 1) % 4 }) },
-      icon('seat', 30), h('span', { class: 'lv' }, [1, 2, 3].map((i) => h('i', { class: lv >= i ? 'on' : '' }))));
-    if (lv) seat.style.color = '#ff7a45';
-    const dn = h('button', { class: 'step', onclick: step(-1) }, icon('back', 26));
-    const up = h('button', { class: 'step', onclick: step(1) }, icon('chev', 26));
-    const val = h('div', { class: 'val', onclick: () => document.dispatchEvent(new CustomEvent('open-climate')) }, c.on ? tempStr(c[side]) : 'OFF');
-    root.replaceChildren(...(side === 'L' ? [seat, dn, val, up] : [dn, val, up, seat]));
+    // like the real bar: dim chevrons around a number with a tiny "Manual" caption; the seat-heat glyph only shows while it is on
+    const seat = h('button', { class: 'seat', title: 'Seat heat', onclick: () => setC({ [seatKey]: (lv + 1) % 4 }) }, icon('heatseat', 34));
+    const dn = h('button', { class: 'step', onclick: step(-1) }, icon('back', 18));
+    const up = h('button', { class: 'step', onclick: step(1) }, icon('chev', 18));
+    const val = h('div', { class: 'val', onclick: () => document.dispatchEvent(new CustomEvent('open-climate')) },
+      h('small', null, c.auto ? 'Auto' : 'Manual'), h('b', null, c.on ? tempStr(c[side]) : 'OFF'));
+    const parts = side === 'L' ? [dn, val, up, ...(lv ? [seat] : [])] : [...(lv ? [seat] : []), dn, val, up];
+    root.replaceChildren(...parts);
   };
   render();
   store.subscribe((p) => { if ('climate' in p || 'tempUnit' in p) render(); });
@@ -43,6 +44,10 @@ export function climatePopup(close) {
         t('bioweapon', 'fan', 'Bioweapon defense'), t('dog', 'fire', 'Dog mode'), t('camp', 'moon', 'Camp mode'),
         t('keepOn', 'sun', 'Keep climate on'), t('overheat', 'sun', 'Overheat protect')),
       h('div', { style: { display: 'flex', gap: '12px', marginTop: '14px', alignItems: 'center' } },
+        h('span', { class: 'muted' }, 'Front seats'),
+        ...['seatL', 'seatR'].map((k) => h('button', { class: 'btn', onclick: () => setC({ [k]: (c[k] + 1) % 4 }) },
+          icon('heat', 22), k === 'seatL' ? 'Driver' : 'Passenger', ' ', c[k] ? '●'.repeat(c[k]) : 'off'))),
+      h('div', { style: { display: 'flex', gap: '12px', marginTop: '10px', alignItems: 'center' } },
         h('span', { class: 'muted' }, 'Rear seats'),
         ...['seatRL', 'seatRR'].map((k) => h('button', { class: 'btn', onclick: () => setC({ [k]: (c[k] + 1) % 4 }) },
           icon('heat', 22), k === 'seatRL' ? 'Left' : 'Right', ' ', c[k] ? '●'.repeat(c[k]) : 'off'))),

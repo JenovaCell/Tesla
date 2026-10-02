@@ -2,6 +2,7 @@ import { h, $, toast } from './util.js';
 import { icon } from './icons.js';
 import { store, model, resolvedTheme, simTick } from './state.js';
 import { tempControl, climatePopup } from './climate.js';
+import { dockGlyph } from './dockicons.js';
 import { slider } from './ui.js';
 import { mountControls } from './controls.js';
 import { mountTheater } from './apps/theater.js';
@@ -28,8 +29,6 @@ const APPS = {
   browser: { name: 'Web', icon: 'globe', action: () => { closeApp(); openBrowser(); } },
   apps: { name: 'Apps', icon: 'apps', mount: (r) => mountLauncher(r) },
 };
-const ACCENT = { controls: null, music: '#ff4d6d', phone: '#34c759', calendar: '#ff9f0a', energy: '#ffd60a', theater: '#ff453a', toybox: '#bf5af2', camera: '#64d2ff', apps: null };
-const DOCK = ['controls', 'music', 'phone', 'calendar', 'energy', 'theater', 'toybox', 'camera', 'apps'];
 
 let overlay = null, overlayId = null, overlayDispose = null;
 function closeApp() {
@@ -85,18 +84,29 @@ function buildDock() {
   };
   document.addEventListener('open-climate', toggleClimate);
   const closeVol = () => { vp.scrim.remove(); vp.remove(); vp = null; };
-  const vol = h('button', { class: 'dockbtn', onclick: () => {
+  const volTo = (v) => store.set({ volume: Math.min(100, Math.max(0, v)) });
+  const vol = h('button', { class: 'dockbtn flat', title: 'Volume', onclick: () => {
     if (vp) return closeVol();
     vp = h('div', { class: 'popup', style: { right: '24px', bottom: 'calc(var(--dock-h) + 10px)', width: '460px', display: 'flex', alignItems: 'center', gap: '16px' } },
       icon('vol', 30), slider({ min: 0, max: 100, value: store.get('volume'), onChange: (v) => store.set({ volume: v }) }));
     vp.scrim = h('div', { class: 'scrim', onpointerdown: closeVol });
     $('.screen').append(vp.scrim, vp);
-  } }, icon('vol', 28));
-  const theme = h('button', { class: 'dockbtn', id: 'themeBtn', title: 'Light / Dark', onclick: () => store.set({ theme: resolvedTheme() === 'dark' ? 'light' : 'dark' }) });
-  const full = h('button', { class: 'dockbtn', title: 'Fullscreen (F11)', onclick: () => toggleFullscreen() }, icon('full', 26));
-  return h('div', { class: 'dock' }, left,
-    h('div', { class: 'center' }, DOCK.map((id) => h('button', { class: 'dockbtn', 'data-app': id, title: APPS[id].name, style: ACCENT[id] ? { color: ACCENT[id] } : null, onclick: () => openApp(id) }, icon(APPS[id].icon, 30)))),
-    right, vol, theme, full);
+  } }, icon('vol', 36));
+  const volRow = h('div', { class: 'volrow' },
+    h('button', { class: 'step', onclick: () => volTo(store.get('volume') - 10) }, icon('back', 18)), vol,
+    h('button', { class: 'step', onclick: () => volTo(store.get('volume') + 10) }, icon('chev', 18)));
+  const theme = h('button', { class: 'dockbtn small', id: 'themeBtn', title: 'Light / Dark', onclick: () => store.set({ theme: resolvedTheme() === 'dark' ? 'light' : 'dark' }) });
+  const full = h('button', { class: 'dockbtn small', title: 'Fullscreen (F11)', onclick: () => toggleFullscreen() }, icon('full', 22));
+  const appBtn = (id, glyph) => h('button', { class: 'dockbtn flat', 'data-app': id, title: APPS[id].name, onclick: () => openApp(id) }, dockGlyph(glyph));
+  const car = h('button', { class: 'dockbtn flat carbtn', 'data-app': 'controls', title: 'Controls', onclick: () => openApp('controls') }, icon('car', 40));
+  const road = h('button', { class: 'dockbtn flat', title: 'Switch driving view', onclick: () => { if (director.state === 'drive') director.setLayout(director.layout === 'full' ? 'split' : 'full'); } }, dockGlyph('road'));
+  return h('div', { class: 'dock' },
+    h('div', { class: 'dgrp l' }, car, left),
+    h('div', { class: 'center' },
+      appBtn('phone', 'phone'), appBtn('theater', 'theater'), appBtn('music', 'music'), appBtn('camera', 'camera'), appBtn('toybox', 'toybox'),
+      appBtn('calendar', 'calendar'), appBtn('energy', 'energy'), appBtn('apps', 'apps'), h('i', { class: 'sep' }),
+      h('button', { class: 'dockbtn flat', title: 'Bluetooth', onclick: () => openApp('controls') }, dockGlyph('bluetooth')), road),
+    h('div', { class: 'dgrp r' }, right, volRow, theme, full));
 }
 function toggleFullscreen() {
   if (window.host) window.host.toggleFullscreen();

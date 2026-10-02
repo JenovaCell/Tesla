@@ -8,7 +8,7 @@ export const store = createStore({
   locked: true, sentry: false, doors: { fl: false, fr: false, rl: false, rr: false }, frunk: false, trunk: false,
   chargePort: false, charging: false, chargeLimit: 80, lights: 'auto', headlights: false, flash: 0, mirrorsFolded: false,
   soc: 78, odo: 4821.4, tripA: 0, tripB: 0, tires: [42, 42, 41, 42],
-  climate: { on: true, auto: true, L: 70, R: 70, fan: 3, ac: true, recirc: false, defrostF: false, defrostR: false,
+  climate: { on: true, auto: false, L: 70, R: 70, fan: 3, ac: true, recirc: false, defrostF: false, defrostR: false,
     seatL: 0, seatR: 0, seatRL: 0, seatRR: 0, wheelHeat: false, bioweapon: false, dog: false, camp: false, keepOn: false, overheat: true },
   s: {},   // generic settings (see controls.js)
   events: [],
