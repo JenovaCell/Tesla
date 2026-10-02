@@ -1,0 +1,33 @@
+{
+  "name": "tesla-screen-sim",
+  "version": "1.0.0",
+  "description": "Touchscreen simulator of the Tesla in-car UI (v14 style) for Windows 11 touch devices",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable nsis"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "electron": "github:castlabs/electron-releases#v43.5.0+wvcus",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "local.teslascreensim",
+    "productName": "Tesla Screen Sim",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "node_modules/leaflet/dist/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    }
+  }
+}
