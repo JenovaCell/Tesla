@@ -57,9 +57,10 @@ export const SPEC = {
 
 SPEC.model3 = { ...SPEC.sedan, wheelR: 0.35, bar: 0.78 };
 SPEC.modely = {
-  belt: [[0, 0.9], [0.1, 1.02], [0.7, 1.07], [1.7, 1.08], [3.4, 1.04], [4.0, 0.95], [4.5, 0.8], [4.8, 0.6]],
-  roof: [[0, 0], [0.35, 1.07], [0.7, 1.3], [1.2, 1.52], [1.8, 1.62], [2.5, 1.64], [3.0, 1.58], [3.4, 1.38], [3.8, 1.05], [4.8, 0]],
-  cabW: 0.82, wheelR: 0.37, bar: 0.82,
+  // measured from the real car's side view: roof peaks ~2 m from the tail, windshield base ~3.45 m from the tail (long hood), full hatch
+  belt: [[0, 0.92], [0.1, 1.05], [0.5, 1.1], [1.7, 1.08], [3.2, 1.04], [3.6, 1.0], [4.0, 0.95], [4.5, 0.86], [4.8, 0.74]],
+  roof: [[0, 0], [0.04, 1.05], [0.15, 1.22], [0.45, 1.38], [0.85, 1.5], [1.25, 1.58], [1.65, 1.625], [2.05, 1.625], [2.35, 1.59], [2.65, 1.5], [2.95, 1.36], [3.25, 1.17], [3.5, 1.03], [4.8, 0]],
+  cabW: 0.82, wheelR: 0.37, bar: 0.82, noseLift: 0.1,
 };
 SPEC.models = {
   belt: [[0, 0.86], [0.1, 0.98], [0.8, 1.0], [1.9, 1.0], [3.6, 0.96], [4.2, 0.86], [4.7, 0.72], [5.02, 0.52]],
@@ -105,7 +106,7 @@ export function buildBodyGeometry(type, o = {}) {
     const cab = roof - belt;
     if (cab > 0.12) { cabRange[0] = Math.min(cabRange[0], x); cabRange[1] = Math.max(cabRange[1], x); }
     const w = facet ? hw0 * (1 - 0.2 * sstep(0.78, 1, x / L)) : bodyHalfWidth(x, L, hw0);
-    const y0 = facet ? 0.28 : 0.2 + 0.22 * Math.pow(Math.abs(u), 4);
+    const y0 = facet ? 0.28 : 0.2 + (sp.noseLift ?? 0.22) * Math.pow(Math.abs(u), 4);
     const cw = sp.cabW, cabin = top - belt;
     let half;
     if (facet) {

@@ -154,7 +154,7 @@ function getParts(type) {
   const axles = [-L / 2 + 0.98, L / 2 - 0.98];
   const facet = !!sp.facet;
   const arches = axles.map((z) => ({ z, r, k: 1.34, depth: 0.27 }));
-  const base = facet ? buildBodyGeometry(type) : buildBodyGeometry(type, { nst: 130, kh: 30 });
+  const base = facet ? buildBodyGeometry(type) : buildBodyGeometry(type, { nst: 130, kh: 30, arches });
   const P = base.attributes.position, N = base.attributes.normal, info = base.userData.info;
   const gl = glassFactor(base, !facet);
 
@@ -164,6 +164,16 @@ function getParts(type) {
     const f = info[i], y = P.getY(i), ny = N.getY(i);
     let ao = 0.5 + 0.5 * sstep(f.y0 + 0.02, f.y0 + 0.55, y);
     ao *= 1 - 0.45 * sstep(-0.1, -0.5, ny);
+    if (!facet && f.cab > 0.12 && gl[i] < 0.5 && y > f.belt + 0.04 && Math.abs(N.getX(i)) > 0.25) ao *= 0.1;      // black B / C pillars
+    if (!facet) {
+      const z = P.getZ(i), ax = Math.abs(P.getX(i));
+      // dark wheel wells
+      for (const a of arches) { const d = Math.hypot(z - a.z, y - a.r), Ra = a.r * (a.k ?? 1.3); if (ax > hw * 0.4) ao *= 1 - 0.85 * sstep(Ra * 1.02, Ra * 0.8, d); }
+      // unpainted dark lower bumpers / valances front and rear, and a dark sill
+      const fromEnd = Math.min(z + L / 2, L / 2 - z);
+      ao *= 1 - 0.8 * sstep(0.34, 0.2, y) * sstep(1.0, 0.55, fromEnd);
+      ao *= 1 - 0.55 * sstep(0.3, 0.22, y);
+    }
     col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = ao;
   }
   const colorAttr = new THREE.BufferAttribute(col, 3);
@@ -201,7 +211,7 @@ function getParts(type) {
   const tail = new THREE.TubeGeometry(railCurve(type, barW, ty, false), 48, type === 'cybertruck' ? 0.026 : 0.02, 6);
   const hy = Math.max(0.64, lerpPts(sp.belt, L - 0.08) - 0.03);
   let head;
-  if (type === 'model3' || type === 'models') {                   // two slim angled units
+  if (type === 'model3' || type === 'models' || type === 'modely' || type === 'modelx') {                   // two slim angled units
     const mk = (s) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3([0.3, 0.55, 0.8].map((t, i) => new THREE.Vector3(s * (t * hw), hy + 0.035 * (1 - i * 0.6), surfaceZ(type, t * hw, true)))), 12, 0.017, 6);
     head = mergeGeometries([mk(-1), mk(1)]);
   } else head = new THREE.TubeGeometry(railCurve(type, hw * (type === 'cybertruck' ? 0.9 : 0.78), hy, true, -0.02), 48, 0.016, 6);
@@ -221,14 +231,14 @@ export function buildEgo(type, opts = {}) {
   const mats = [];
   const reg = (m) => { mats.push(m); return m; };
   const paint = reg(new THREE.MeshPhysicalMaterial({
-    vertexColors: true, color: opts.tint ?? 0xcccccc, metalness: type === 'cybertruck' ? 0.75 : 0.5, roughness: type === 'cybertruck' ? 0.4 : 0.34,
-    clearcoat: type === 'cybertruck' ? 0 : 1, clearcoatRoughness: 0.07, envMap: env, envMapIntensity: opts.envIntensity ?? 1.0, flatShading: !!sp.facet, transparent: tr,
+    vertexColors: true, color: opts.tint ?? 0xcccccc, metalness: type === 'cybertruck' ? 0.75 : 0.45, roughness: type === 'cybertruck' ? 0.4 : 0.42,
+    clearcoat: type === 'cybertruck' ? 0 : 0.55, clearcoatRoughness: 0.2, envMap: env, envMapIntensity: opts.envIntensity ?? 1.0, flatShading: !!sp.facet, transparent: tr,
   }));
   const add = (geo, mat, order) => { const m = new THREE.Mesh(geo, mat); m.renderOrder = order; g.add(m); return m; };
   add(P.body, paint, 3);                                                       // child 0 = body (scene uses it for the rim outline)
   add(P.interior, new THREE.MeshLambertMaterial({ vertexColors: true, transparent: tr }), 4);
   const glass = reg(new THREE.MeshPhysicalMaterial({
-    color: 0x0a0c11, metalness: 0.25, roughness: 0.05, transparent: true, opacity: 0.74, envMap: env, envMapIntensity: 1.5, depthWrite: false, clearcoat: 1,
+    color: 0x07080b, metalness: 0.25, roughness: 0.05, transparent: true, opacity: 0.8, envMap: env, envMapIntensity: 0.7, depthWrite: false, clearcoat: 1,
   }));
   add(P.glass, glass, 6);
   if (P.seams) { const ls = new THREE.LineSegments(P.seams, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false })); ls.renderOrder = 5; g.add(ls); }
